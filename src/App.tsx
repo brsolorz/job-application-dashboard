@@ -22,6 +22,7 @@ type ImportSummary = {
   importedCount: number;
   mappedFields: string[];
   unmatchedColumns: string[];
+  ambiguousDateCount: number;
 };
 
 type RawRow = Record<string, unknown>;
@@ -198,7 +199,11 @@ function App() {
     );
     setRecords((current) => mergeRecords(current, result.records));
     setImportMessage(
-      `Imported ${result.summary.importedCount} rows. Mapped ${result.summary.mappedFields.join(", ") || "no known fields"}.`,
+      `Imported ${result.summary.importedCount} rows. Mapped ${result.summary.mappedFields.join(", ") || "no known fields"}.${
+        result.summary.ambiguousDateCount > 0
+          ? ` Preserved ${result.summary.ambiguousDateCount} date value${result.summary.ambiguousDateCount === 1 ? "" : "s"} without a year exactly as written.`
+          : ""
+      }`,
     );
     setPendingImport(null);
     setEditingRowId(null);
@@ -782,24 +787,34 @@ function normalizeImportedRows(
     (header) => !Object.values(fieldMap).includes(header),
   );
 
+  let ambiguousDateCount = 0;
+
   const records = rows
     .map((row) => {
+      const appliedDate = normalizeDate(readMappedValue(row, fieldMap.appliedDate));
+      const nextActionDue = normalizeDate(readMappedValue(row, fieldMap.nextActionDue));
+      const lastUpdated = normalizeDate(readMappedValue(row, fieldMap.lastUpdated));
+
+      ambiguousDateCount += Number(appliedDate.wasAmbiguous);
+      ambiguousDateCount += Number(nextActionDue.wasAmbiguous);
+      ambiguousDateCount += Number(lastUpdated.wasAmbiguous);
+
       const record: JobRecord = {
         id: crypto.randomUUID(),
         company: readMappedValue(row, fieldMap.company),
         role: readMappedValue(row, fieldMap.role),
         status: normalizeStatus(readMappedValue(row, fieldMap.status)),
         stage: readMappedValue(row, fieldMap.stage),
-        appliedDate: normalizeDate(readMappedValue(row, fieldMap.appliedDate)),
+        appliedDate: appliedDate.value,
         location: readMappedValue(row, fieldMap.location),
         recruiter: readMappedValue(row, fieldMap.recruiter),
         nextAction: readMappedValue(row, fieldMap.nextAction),
-        nextActionDue: normalizeDate(readMappedValue(row, fieldMap.nextActionDue)),
+        nextActionDue: nextActionDue.value,
         notes: readMappedValue(row, fieldMap.notes),
         source: readMappedValue(row, fieldMap.source) || sourceLabel,
         link: readMappedValue(row, fieldMap.link),
         salary: readMappedValue(row, fieldMap.salary),
-        lastUpdated: normalizeDate(readMappedValue(row, fieldMap.lastUpdated)) || todayIso(),
+        lastUpdated: lastUpdated.value || todayIso(),
       };
 
       if (!record.stage && record.status) {
@@ -816,6 +831,7 @@ function normalizeImportedRows(
       importedCount: records.length,
       mappedFields,
       unmatchedColumns,
+      ambiguousDateCount,
     } satisfies ImportSummary,
   };
 }
@@ -901,15 +917,39 @@ function normalizeStatus(value: string) {
 
 function normalizeDate(value: string) {
   if (!value) {
-    return "";
+    return { value: "", wasAmbiguous: false };
   }
 
-  const date = new Date(value);
+  const trimmed = value.trim();
+
+  if (isMonthDayWithoutYear(trimmed)) {
+    return { value: trimmed, wasAmbiguous: true };
+  }
+
+  if (!hasExplicitYear(trimmed) && /[/-]/.test(trimmed)) {
+    return { value: trimmed, wasAmbiguous: true };
+  }
+
+  const date = new Date(trimmed);
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return { value: trimmed, wasAmbiguous: false };
   }
 
-  return date.toISOString().slice(0, 10);
+  return { value: date.toISOString().slice(0, 10), wasAmbiguous: false };
+}
+
+function isMonthDayWithoutYear(value: string) {
+  return /^(0?[1-9]|1[0-2])[/-](0?[1-9]|[12][0-9]|3[01])$/.test(value);
+}
+
+function hasExplicitYear(value: string) {
+  const parts = value.split(/[/-]/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 3) {
+    return false;
+  }
+
+  const lastPart = parts[parts.length - 1] ?? "";
+  return /^\d{4}$/.test(lastPart) || /^\d{2}$/.test(lastPart);
 }
 
 function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
