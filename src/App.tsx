@@ -329,6 +329,34 @@ function App() {
     });
   }
 
+  function applyBulkSequenceResolution() {
+    setPendingImport((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const previews = inspectAmbiguousDates(current.rows, current.fieldMap, {});
+      const nextResolutions: Partial<Record<FieldKey, DateResolution>> = {
+        ...current.dateResolutions,
+      };
+      const defaultYear = String(new Date().getFullYear());
+
+      previews.forEach((preview) => {
+        if (preview.supportsSequence) {
+          nextResolutions[preview.field] = {
+            kind: "sequence",
+            startYear: getResolutionYear(current.dateResolutions[preview.field]) ?? defaultYear,
+          };
+        }
+      });
+
+      return {
+        ...current,
+        dateResolutions: nextResolutions,
+      };
+    });
+  }
+
   function startEditing(record: JobRecord) {
     setEditingRowId(record.id);
     setEditingDraft({ ...record });
@@ -570,8 +598,9 @@ function App() {
                 <div className="mapping-alert">
                   <h3>Review date values without a year before importing</h3>
                   <p>
-                    Choose a year for any values you want normalized. Leave a value unresolved if
-                    you want the app to preserve it exactly as written.
+                    Choose a bulk default below, then override any individual date column if
+                    needed. Leave a value unresolved if you want the app to preserve it exactly as
+                    written.
                   </p>
                   <div className="bulk-resolution-actions">
                     <button
@@ -586,6 +615,14 @@ function App() {
                     >
                       Apply nearest past year
                     </button>
+                    {pendingAmbiguousDates.some((item) => item.supportsSequence) ? (
+                      <button
+                        className="ghost-button bulk-button"
+                        onClick={applyBulkSequenceResolution}
+                      >
+                        Start at year and roll forward
+                      </button>
+                    ) : null}
                   </div>
                   <div className="resolution-list">
                     {pendingAmbiguousDates.map((item) => (
