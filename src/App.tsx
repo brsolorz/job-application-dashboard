@@ -35,6 +35,12 @@ type PendingImport = {
   fieldMap: Record<FieldKey, string>;
 };
 
+type AmbiguousDatePreview = {
+  field: FieldKey;
+  header: string;
+  value: string;
+};
+
 const STORAGE_KEY = "job-dashboard-records";
 
 const fieldLabels: Record<FieldKey, string> = {
@@ -324,6 +330,14 @@ function App() {
     return summarizeFieldMap(pendingImport.headers, pendingImport.fieldMap);
   }, [pendingImport]);
 
+  const pendingAmbiguousDates = useMemo(() => {
+    if (!pendingImport) {
+      return [];
+    }
+
+    return inspectAmbiguousDates(pendingImport.rows, pendingImport.fieldMap);
+  }, [pendingImport]);
+
   return (
     <div className="app-shell">
       <div className="background-orb background-orb-left" />
@@ -441,7 +455,28 @@ function App() {
                   <span>Source</span>
                   <strong>{pendingImport.sourceLabel}</strong>
                 </div>
+                <div className="mapping-chip">
+                  <span>Ambiguous dates</span>
+                  <strong>{pendingAmbiguousDates.length}</strong>
+                </div>
               </div>
+
+              {pendingAmbiguousDates.length > 0 ? (
+                <div className="mapping-alert">
+                  <h3>Review date values without a year before importing</h3>
+                  <p>
+                    These values look ambiguous, so the app will preserve them exactly as written
+                    instead of guessing a year.
+                  </p>
+                  <div className="mapping-tags">
+                    {pendingAmbiguousDates.slice(0, 6).map((item, index) => (
+                      <span key={`${item.field}-${item.value}-${index}`} className="tag tag-warning">
+                        {fieldLabels[item.field]}: {item.value}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mapping-grid">
                 {FIELD_KEYS.map((field) => (
@@ -880,6 +915,32 @@ function summarizeFieldMap(headers: string[], fieldMap: Record<FieldKey, string>
       .map(([field]) => field),
     unmatchedColumns: headers.filter((header) => !Object.values(fieldMap).includes(header)),
   };
+}
+
+function inspectAmbiguousDates(rows: RawRow[], fieldMap: Record<FieldKey, string>) {
+  const dateFields: FieldKey[] = ["appliedDate", "nextActionDue", "lastUpdated"];
+  const previews: AmbiguousDatePreview[] = [];
+
+  dateFields.forEach((field) => {
+    const header = fieldMap[field];
+    if (!header) {
+      return;
+    }
+
+    rows.forEach((row) => {
+      const rawValue = readMappedValue(row, header);
+      if (!rawValue) {
+        return;
+      }
+
+      const normalized = normalizeDate(rawValue);
+      if (normalized.wasAmbiguous) {
+        previews.push({ field, header, value: rawValue });
+      }
+    });
+  });
+
+  return previews;
 }
 
 function readMappedValue(row: RawRow, header: string) {

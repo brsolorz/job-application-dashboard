@@ -361,7 +361,7 @@ button {
 }
 
 .mapping-summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 16px;
 }
 
@@ -405,6 +405,25 @@ button {
   grid-template-columns: 0.8fr 1.2fr;
 }
 
+.mapping-alert {
+  margin-bottom: 16px;
+  border: 1px solid rgba(209, 91, 39, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 244, 238, 0.75);
+  padding: 16px;
+}
+
+.mapping-alert h3 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.1rem;
+}
+
+.mapping-alert p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
 .mapping-preview-card h3 {
   margin: 0 0 14px;
   font-family: "Space Grotesk", sans-serif;
@@ -429,6 +448,11 @@ button {
 .tag-success {
   background: rgba(30, 123, 116, 0.14);
   color: var(--teal);
+}
+
+.tag-warning {
+  background: rgba(209, 91, 39, 0.14);
+  color: var(--accent);
 }
 
 .preview-table-scroll {
