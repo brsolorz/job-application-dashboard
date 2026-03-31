@@ -33,7 +33,7 @@ type PendingImport = {
   sourceLabel: string;
   headers: string[];
   fieldMap: Record<FieldKey, string>;
-  dateResolutions: Partial<Record<FieldKey, string>>;
+  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>;
 };
 
 type AmbiguousDatePreview = {
@@ -246,6 +246,33 @@ function App() {
           }
         : null,
     );
+  }
+
+  function applyBulkDateResolution(strategy: "current" | "nearestPast") {
+    setPendingImport((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const previews = inspectAmbiguousDates(
+        current.rows,
+        current.fieldMap,
+        {},
+      );
+
+      const nextResolutions: Partial<Record<FieldKey, string | "nearestPast">> = {
+        ...current.dateResolutions,
+      };
+
+      previews.forEach((preview) => {
+        nextResolutions[preview.field] = resolveYearForStrategy(strategy);
+      });
+
+      return {
+        ...current,
+        dateResolutions: nextResolutions,
+      };
+    });
   }
 
   function startEditing(record: JobRecord) {
@@ -492,6 +519,20 @@ function App() {
                     Choose a year for any values you want normalized. Leave a value unresolved if
                     you want the app to preserve it exactly as written.
                   </p>
+                  <div className="bulk-resolution-actions">
+                    <button
+                      className="ghost-button bulk-button"
+                      onClick={() => applyBulkDateResolution("current")}
+                    >
+                      Apply current year
+                    </button>
+                    <button
+                      className="ghost-button bulk-button"
+                      onClick={() => applyBulkDateResolution("nearestPast")}
+                    >
+                      Apply nearest past year
+                    </button>
+                  </div>
                   <div className="resolution-list">
                     {pendingAmbiguousDates.map((item) => (
                       <div key={item.field} className="resolution-item">
@@ -512,6 +553,7 @@ function App() {
                           }
                         >
                           <option value="">Keep as written</option>
+                          <option value="nearestPast">Use nearest past year</option>
                           {resolutionYears.map((year) => (
                             <option key={`${item.field}-${year}`} value={year}>
                               Use {year} for all
@@ -858,7 +900,7 @@ function normalizeImportedRows(
   rows: RawRow[],
   sourceLabel: string,
   fieldMap: Record<FieldKey, string>,
-  dateResolutions: Partial<Record<FieldKey, string>>,
+  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>,
 ) {
   const headers = Object.keys(rows[0] ?? {});
   const mappedFields = Object.entries(fieldMap)
@@ -983,7 +1025,7 @@ function summarizeFieldMap(headers: string[], fieldMap: Record<FieldKey, string>
 function inspectAmbiguousDates(
   rows: RawRow[],
   fieldMap: Record<FieldKey, string>,
-  dateResolutions: Partial<Record<FieldKey, string>>,
+  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>,
 ) {
   const dateFields: FieldKey[] = ["appliedDate", "nextActionDue", "lastUpdated"];
   const previews: AmbiguousDatePreview[] = [];
@@ -1084,7 +1126,7 @@ function normalizeDate(value: string) {
 function applyDateResolution(
   field: FieldKey,
   normalized: { value: string; wasAmbiguous: boolean },
-  dateResolutions: Partial<Record<FieldKey, string>>,
+  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>,
 ) {
   if (!normalized.wasAmbiguous) {
     return normalized;
@@ -1093,6 +1135,13 @@ function applyDateResolution(
   const year = dateResolutions[field];
   if (!year) {
     return normalized;
+  }
+
+  if (year === "nearestPast") {
+    return {
+      value: applyNearestPastYear(normalized.value),
+      wasAmbiguous: false,
+    };
   }
 
   const resolved = normalizeDate(`${normalized.value}/${year}`);
@@ -1105,6 +1154,35 @@ function applyDateResolution(
 function buildResolutionYears() {
   const currentYear = new Date().getFullYear();
   return Array.from({ length: 8 }, (_, index) => String(currentYear - 2 + index));
+}
+
+function resolveYearForStrategy(strategy: "current" | "nearestPast") {
+  const currentYear = new Date().getFullYear();
+  if (strategy === "current") {
+    return String(currentYear);
+  }
+
+  return "nearestPast";
+}
+
+function applyNearestPastYear(value: string) {
+  const match = value.match(/^(\d{1,2})[/-](\d{1,2})$/);
+  if (!match) {
+    return value;
+  }
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const resolvedYear =
+    month > currentMonth || (month === currentMonth && day > currentDay)
+      ? currentYear - 1
+      : currentYear;
+
+  return `${resolvedYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function isMonthDayWithoutYear(value: string) {

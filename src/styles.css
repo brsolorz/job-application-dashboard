@@ -425,6 +425,17 @@ button {
   color: var(--muted);
 }
 
+.bulk-resolution-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.bulk-button {
+  padding: 10px 14px;
+}
+
 .resolution-list {
   display: grid;
   gap: 12px;
