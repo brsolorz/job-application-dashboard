@@ -250,11 +250,13 @@ function App() {
       pendingImport.sourceLabel,
       pendingImport.fieldMap,
     );
-    setRecords((current) => mergeRecords(current, result.records));
+    setRecords((current) => mergeRecords(removeStarterRecords(current), result.records));
     setImportMessage(
       `Imported ${result.summary.importedCount} rows. Mapped ${result.summary.mappedFields.join(", ") || "no known fields"}.`,
     );
     setPendingImport(null);
+    setEditingRowId(null);
+    setEditingDraft(null);
   }
 
   function updatePendingImportField(field: FieldKey, header: string) {
@@ -924,6 +926,20 @@ function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
   });
 
   return merged;
+}
+
+function removeStarterRecords(records: JobRecord[]) {
+  return records.filter((record) => !isStarterRecord(record));
+}
+
+function isStarterRecord(record: JobRecord) {
+  return starterData.some(
+    (starter) =>
+      starter.company === record.company &&
+      starter.role === record.role &&
+      starter.status === record.status &&
+      starter.nextAction === record.nextAction,
+  );
 }
 
 function isActiveProcess(status: string, stage: string) {
