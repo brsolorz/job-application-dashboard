@@ -72,60 +72,6 @@ const fieldMatchers: Record<keyof Omit<JobRecord, "id">, string[]> = {
 
 const FIELD_KEYS = Object.keys(fieldMatchers) as FieldKey[];
 
-const starterData: JobRecord[] = [
-  {
-    id: crypto.randomUUID(),
-    company: "Northstar AI",
-    role: "Frontend Engineer",
-    status: "Interviewing",
-    stage: "Onsite Loop",
-    appliedDate: "2026-03-10",
-    location: "Remote",
-    recruiter: "Alex Chen",
-    nextAction: "Send recruiter availability for final panel",
-    nextActionDue: "2026-04-02",
-    notes: "Team is moving quickly. Product sense round done.",
-    source: "Referral",
-    link: "",
-    salary: "$155k - $180k",
-    lastUpdated: "2026-03-29",
-  },
-  {
-    id: crypto.randomUUID(),
-    company: "Verdant Labs",
-    role: "Product Engineer",
-    status: "Applied",
-    stage: "Application Review",
-    appliedDate: "2026-03-18",
-    location: "San Francisco, CA",
-    recruiter: "",
-    nextAction: "Tailor portfolio case study",
-    nextActionDue: "2026-04-04",
-    notes: "Need stronger narrative around analytics work.",
-    source: "Company site",
-    link: "",
-    salary: "",
-    lastUpdated: "2026-03-20",
-  },
-  {
-    id: crypto.randomUUID(),
-    company: "Kite Commerce",
-    role: "Software Engineer",
-    status: "Take-home",
-    stage: "Technical Assessment",
-    appliedDate: "2026-03-05",
-    location: "Hybrid",
-    recruiter: "Maya Patel",
-    nextAction: "Finish coding take-home assignment",
-    nextActionDue: "2026-04-01",
-    notes: "Assessment window closes tomorrow.",
-    source: "LinkedIn",
-    link: "",
-    salary: "",
-    lastUpdated: "2026-03-30",
-  },
-];
-
 function App() {
   const [records, setRecords] = useState<JobRecord[]>(() => loadInitialRecords());
   const [googleSheetUrl, setGoogleSheetUrl] = useState("");
@@ -250,7 +196,7 @@ function App() {
       pendingImport.sourceLabel,
       pendingImport.fieldMap,
     );
-    setRecords((current) => mergeRecords(removeStarterRecords(current), result.records));
+    setRecords((current) => mergeRecords(current, result.records));
     setImportMessage(
       `Imported ${result.summary.importedCount} rows. Mapped ${result.summary.mappedFields.join(", ") || "no known fields"}.`,
     );
@@ -339,6 +285,24 @@ function App() {
     startEditing(newRecord);
   }
 
+  function clearAllData() {
+    const shouldClear = window.confirm(
+      "Clear all saved job application data and start over?",
+    );
+
+    if (!shouldClear) {
+      return;
+    }
+
+    localStorage.removeItem(STORAGE_KEY);
+    setRecords([]);
+    setPendingImport(null);
+    setEditingRowId(null);
+    setEditingDraft(null);
+    setGoogleSheetUrl("");
+    setImportMessage("All saved data was cleared. Import a new sheet to start again.");
+  }
+
   const pendingImportPreview = useMemo(() => {
     if (!pendingImport) {
       return [];
@@ -396,6 +360,15 @@ function App() {
               Add manual entry
             </button>
           </div>
+
+          {records.length > 0 ? (
+            <div className="danger-zone">
+              <button className="danger-button" onClick={clearAllData}>
+                Clear all data
+              </button>
+              <span>Wipes the current dashboard so you can import a new tracker.</span>
+            </div>
+          ) : null}
 
           <div className="import-grid">
             <label className="upload-card">
@@ -546,6 +519,12 @@ function App() {
                     <span>{record.stage || record.status}</span>
                   </li>
                 ))}
+                {activeInterviews.length === 0 ? (
+                  <li>
+                    <strong>No active interviews yet</strong>
+                    <span>Import data or add a role to start tracking progress.</span>
+                  </li>
+                ) : null}
               </ul>
             </div>
 
@@ -561,6 +540,12 @@ function App() {
                     </span>
                   </li>
                 ))}
+                {todoItems.length === 0 ? (
+                  <li>
+                    <strong>No open tasks</strong>
+                    <span>Your follow-ups and take-homes will show up here.</span>
+                  </li>
+                ) : null}
               </ul>
             </div>
           </div>
@@ -592,123 +577,139 @@ function App() {
             </div>
           </div>
 
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Stage</th>
-                  <th>Applied</th>
-                  <th>To do</th>
-                  <th>Recruiter</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((record) => (
-                  <tr
-                    key={record.id}
-                    className={editingRowId === record.id ? "table-row-editing" : "table-row"}
-                  >
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "company", updateEditingDraft)
-                      ) : (
-                        renderPrimaryCell(record.company, record.location)
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "role", updateEditingDraft)
-                      ) : (
-                        renderPrimaryCell(record.role, record.source)
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "status", updateEditingDraft)
-                      ) : (
-                        <span className={`status-pill status-${slugify(record.status)}`}>
-                          {record.status || "—"}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "stage", updateEditingDraft)
-                      ) : (
-                        <span className="cell-text">{record.stage || "—"}</span>
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        <div className="stacked-edit-fields">
-                          {renderEditingInput(editingDraft, "appliedDate", updateEditingDraft, "date")}
-                          {renderEditingInput(editingDraft, "nextActionDue", updateEditingDraft, "date")}
-                        </div>
-                      ) : (
-                        renderPrimaryCell(
-                          record.appliedDate || "—",
-                          record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
-                        )
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "nextAction", updateEditingDraft)
-                      ) : (
-                        <span className="cell-text">{record.nextAction || "—"}</span>
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "recruiter", updateEditingDraft)
-                      ) : (
-                        <span className="cell-text">{record.recruiter || "—"}</span>
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingInput(editingDraft, "lastUpdated", updateEditingDraft, "date")
-                      ) : (
-                        <span className="cell-text">{record.lastUpdated || "—"}</span>
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id ? (
-                        <div className="row-actions">
-                          <button className="ghost-button row-button" onClick={cancelEditingRow}>
-                            Cancel
-                          </button>
-                          <button className="primary-button row-button" onClick={saveEditingRow}>
-                            Save
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="ghost-button row-button"
-                          onClick={() => startEditing(record)}
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                    <td>
-                      {editingRowId === record.id && editingDraft ? (
-                        renderEditingTextarea(editingDraft, "notes", updateEditingDraft)
-                      ) : (
-                        <span className="cell-text cell-notes">{record.notes || "—"}</span>
-                      )}
-                    </td>
+          {records.length === 0 ? (
+            <div className="empty-state">
+              <p className="eyebrow">Start Here</p>
+              <h3>No applications yet</h3>
+              <p>
+                Import a Google Sheet, CSV, or Excel file to populate your dashboard, or add a
+                manual entry to build your tracker from scratch.
+              </p>
+              <div className="empty-state-actions">
+                <button className="primary-button" onClick={addBlankRecord}>
+                  Add first application
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Stage</th>
+                    <th>Applied</th>
+                    <th>To do</th>
+                    <th>Recruiter</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                    <th>Notes</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {records.map((record) => (
+                    <tr
+                      key={record.id}
+                      className={editingRowId === record.id ? "table-row-editing" : "table-row"}
+                    >
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "company", updateEditingDraft)
+                        ) : (
+                          renderPrimaryCell(record.company, record.location)
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "role", updateEditingDraft)
+                        ) : (
+                          renderPrimaryCell(record.role, record.source)
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "status", updateEditingDraft)
+                        ) : (
+                          <span className={`status-pill status-${slugify(record.status)}`}>
+                            {record.status || "—"}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "stage", updateEditingDraft)
+                        ) : (
+                          <span className="cell-text">{record.stage || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          <div className="stacked-edit-fields">
+                            {renderEditingInput(editingDraft, "appliedDate", updateEditingDraft, "date")}
+                            {renderEditingInput(editingDraft, "nextActionDue", updateEditingDraft, "date")}
+                          </div>
+                        ) : (
+                          renderPrimaryCell(
+                            record.appliedDate || "—",
+                            record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
+                          )
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "nextAction", updateEditingDraft)
+                        ) : (
+                          <span className="cell-text">{record.nextAction || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "recruiter", updateEditingDraft)
+                        ) : (
+                          <span className="cell-text">{record.recruiter || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingInput(editingDraft, "lastUpdated", updateEditingDraft, "date")
+                        ) : (
+                          <span className="cell-text">{record.lastUpdated || "—"}</span>
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id ? (
+                          <div className="row-actions">
+                            <button className="ghost-button row-button" onClick={cancelEditingRow}>
+                              Cancel
+                            </button>
+                            <button className="primary-button row-button" onClick={saveEditingRow}>
+                              Save
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="ghost-button row-button"
+                            onClick={() => startEditing(record)}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                      <td>
+                        {editingRowId === record.id && editingDraft ? (
+                          renderEditingTextarea(editingDraft, "notes", updateEditingDraft)
+                        ) : (
+                          <span className="cell-text cell-notes">{record.notes || "—"}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -756,14 +757,14 @@ function renderPrimaryCell(primary: string, secondary: string) {
 function loadInitialRecords() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
-    return starterData;
+    return [];
   }
 
   try {
     const parsed = JSON.parse(stored) as JobRecord[];
-    return parsed.length > 0 ? parsed : starterData;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return starterData;
+    return [];
   }
 }
 
@@ -926,20 +927,6 @@ function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
   });
 
   return merged;
-}
-
-function removeStarterRecords(records: JobRecord[]) {
-  return records.filter((record) => !isStarterRecord(record));
-}
-
-function isStarterRecord(record: JobRecord) {
-  return starterData.some(
-    (starter) =>
-      starter.company === record.company &&
-      starter.role === record.role &&
-      starter.status === record.status &&
-      starter.nextAction === record.nextAction,
-  );
 }
 
 function isActiveProcess(status: string, stage: string) {

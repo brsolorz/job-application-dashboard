@@ -228,7 +228,8 @@ button {
 }
 
 .primary-button,
-.ghost-button {
+.ghost-button,
+.danger-button {
   border: 0;
   border-radius: 999px;
   padding: 12px 18px;
@@ -247,6 +248,28 @@ button {
 .ghost-button {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.danger-button {
+  background: rgba(164, 40, 40, 0.12);
+  color: #8b2525;
+}
+
+.danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(164, 40, 40, 0.24);
+  border-radius: 18px;
+  background: rgba(255, 245, 243, 0.65);
+}
+
+.danger-zone span {
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .highlight-card ul {
@@ -284,6 +307,34 @@ button {
 
 .table-panel {
   padding-bottom: 12px;
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 24px;
+  padding: 36px 24px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.75), rgba(255, 245, 233, 0.58)),
+    var(--panel-strong);
+  text-align: center;
+}
+
+.empty-state h3 {
+  margin: 0 0 10px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.8rem;
+}
+
+.empty-state p:last-of-type {
+  max-width: 56ch;
+  margin: 0 auto;
+  color: var(--muted);
+}
+
+.empty-state-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
 }
 
 .mapping-panel {
