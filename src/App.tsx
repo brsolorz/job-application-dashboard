@@ -30,7 +30,7 @@ type FieldKey = keyof Omit<JobRecord, "id">;
 type DateResolution =
   | { kind: "year"; year: string }
   | { kind: "nearestPast" }
-  | { kind: "sequence"; startYear: string };
+  | { kind: "sequence"; startYear: string | null };
 
 type PendingImport = {
   rows: RawRow[];
@@ -272,7 +272,10 @@ function App() {
       } else if (mode === "sequence") {
         nextResolutions[field] = {
           kind: "sequence",
-          startYear: getResolutionYear(current.dateResolutions[field]) ?? String(new Date().getFullYear()),
+          startYear:
+            current.dateResolutions[field]?.kind === "sequence"
+              ? current.dateResolutions[field].startYear
+              : null,
         };
       } else {
         nextResolutions[field] = {
@@ -339,13 +342,13 @@ function App() {
       const nextResolutions: Partial<Record<FieldKey, DateResolution>> = {
         ...current.dateResolutions,
       };
-      const defaultYear = String(new Date().getFullYear());
 
       previews.forEach((preview) => {
+        const existingResolution = current.dateResolutions[preview.field];
         if (preview.supportsSequence) {
           nextResolutions[preview.field] = {
             kind: "sequence",
-            startYear: getResolutionYear(current.dateResolutions[preview.field]) ?? defaultYear,
+            startYear: existingResolution?.kind === "sequence" ? existingResolution.startYear : null,
           };
         }
       });
@@ -681,6 +684,7 @@ function App() {
                                 updatePendingSequenceStartYear(item.field, event.target.value)
                               }
                             >
+                              <option value="">Choose start year</option>
                               {resolutionYears.map((year) => (
                                 <option key={`${item.field}-sequence-${year}`} value={year}>
                                   Start at {year}
@@ -1292,6 +1296,9 @@ function applyDateResolution(
   }
 
   if (resolution.kind === "sequence") {
+    if (!resolution.startYear) {
+      return normalized;
+    }
     return {
       value: applySequenceYear(field, normalized.value, sequenceState),
       wasAmbiguous: false,
@@ -1346,6 +1353,9 @@ function initializeSequenceState(dateResolutions: Partial<Record<FieldKey, DateR
 
   Object.entries(dateResolutions).forEach(([field, resolution]) => {
     if (resolution?.kind === "sequence") {
+      if (!resolution.startYear) {
+        return;
+      }
       state[field as FieldKey] = {
         currentYear: Number(resolution.startYear),
         previousComparable: null,
