@@ -424,6 +424,40 @@ button {
   color: var(--muted);
 }
 
+.resolution-list {
+  display: grid;
+  gap: 12px;
+}
+
+.resolution-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.resolution-item strong,
+.resolution-item span {
+  display: block;
+}
+
+.resolution-item span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.resolution-item select {
+  min-width: 160px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: white;
+  padding: 10px 12px;
+}
+
 .mapping-preview-card h3 {
   margin: 0 0 14px;
   font-family: "Space Grotesk", sans-serif;
@@ -591,6 +625,11 @@ td textarea {
   .mapping-grid,
   .mapping-preview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .resolution-item {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .app-shell {
