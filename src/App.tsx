@@ -25,8 +25,33 @@ type ImportSummary = {
 };
 
 type RawRow = Record<string, unknown>;
+type FieldKey = keyof Omit<JobRecord, "id">;
+
+type PendingImport = {
+  rows: RawRow[];
+  sourceLabel: string;
+  headers: string[];
+  fieldMap: Record<FieldKey, string>;
+};
 
 const STORAGE_KEY = "job-dashboard-records";
+
+const fieldLabels: Record<FieldKey, string> = {
+  company: "Company",
+  role: "Role",
+  status: "Status",
+  stage: "Stage",
+  appliedDate: "Applied date",
+  location: "Location",
+  recruiter: "Recruiter",
+  nextAction: "Next action",
+  nextActionDue: "Next action due",
+  notes: "Notes",
+  source: "Source",
+  link: "Job link",
+  salary: "Salary",
+  lastUpdated: "Last updated",
+};
 
 const fieldMatchers: Record<keyof Omit<JobRecord, "id">, string[]> = {
   company: ["company", "employer", "organization", "org"],
@@ -44,6 +69,8 @@ const fieldMatchers: Record<keyof Omit<JobRecord, "id">, string[]> = {
   salary: ["salary", "comp", "compensation", "pay"],
   lastUpdated: ["updated", "last touch", "last update", "recent touch"],
 };
+
+const FIELD_KEYS = Object.keys(fieldMatchers) as FieldKey[];
 
 const starterData: JobRecord[] = [
   {
@@ -104,6 +131,7 @@ function App() {
   const [googleSheetUrl, setGoogleSheetUrl] = useState("");
   const [importMessage, setImportMessage] = useState<string>("");
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
@@ -142,7 +170,7 @@ function App() {
         skipEmptyLines: true,
       });
 
-      applyImportedRows(parseResult.data, "Google Sheets");
+      prepareImportedRows(parseResult.data, "Google Sheets");
     } catch (error) {
       setImportMessage(
         error instanceof Error
@@ -166,7 +194,7 @@ function App() {
         Papa.parse<RawRow>(file, {
           header: true,
           skipEmptyLines: true,
-          complete: (result) => applyImportedRows(result.data, file.name),
+          complete: (result) => prepareImportedRows(result.data, file.name),
           error: (error) => setImportMessage(error.message),
         });
       });
@@ -183,7 +211,7 @@ function App() {
         const workbook = XLSX.read(buffer, { type: "array" });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<RawRow>(firstSheet, { defval: "" });
-        applyImportedRows(rows, file.name);
+        prepareImportedRows(rows, file.name);
       };
       reader.readAsArrayBuffer(file);
     }
@@ -191,11 +219,53 @@ function App() {
     event.target.value = "";
   }
 
-  function applyImportedRows(rows: RawRow[], sourceLabel: string) {
-    const result = normalizeImportedRows(rows, sourceLabel);
+  function prepareImportedRows(rows: RawRow[], sourceLabel: string) {
+    const headers = Object.keys(rows[0] ?? {}).filter(Boolean);
+    if (rows.length === 0 || headers.length === 0) {
+      setPendingImport(null);
+      setImportMessage("No rows were found in that sheet.");
+      return;
+    }
+
+    setPendingImport({
+      rows,
+      sourceLabel,
+      headers,
+      fieldMap: buildFieldMap(headers),
+    });
+    setImportMessage(
+      `Loaded ${rows.length} rows from ${sourceLabel}. Review the field mapping before importing.`,
+    );
+  }
+
+  function applyPendingImport() {
+    if (!pendingImport) {
+      return;
+    }
+
+    const result = normalizeImportedRows(
+      pendingImport.rows,
+      pendingImport.sourceLabel,
+      pendingImport.fieldMap,
+    );
     setRecords((current) => mergeRecords(current, result.records));
     setImportMessage(
       `Imported ${result.summary.importedCount} rows. Mapped ${result.summary.mappedFields.join(", ") || "no known fields"}.`,
+    );
+    setPendingImport(null);
+  }
+
+  function updatePendingImportField(field: FieldKey, header: string) {
+    setPendingImport((current) =>
+      current
+        ? {
+            ...current,
+            fieldMap: {
+              ...current.fieldMap,
+              [field]: header,
+            },
+          }
+        : null,
     );
   }
 
@@ -235,6 +305,22 @@ function App() {
       ...current,
     ]);
   }
+
+  const pendingImportPreview = useMemo(() => {
+    if (!pendingImport) {
+      return [];
+    }
+
+    return pendingImport.rows.slice(0, 3);
+  }, [pendingImport]);
+
+  const pendingImportSummary = useMemo(() => {
+    if (!pendingImport) {
+      return null;
+    }
+
+    return summarizeFieldMap(pendingImport.headers, pendingImport.fieldMap);
+  }, [pendingImport]);
 
   return (
     <div className="app-shell">
@@ -313,6 +399,100 @@ function App() {
           </div>
 
           <p className="import-message">{importMessage}</p>
+
+          {pendingImport && pendingImportSummary ? (
+            <div className="mapping-panel">
+              <div className="section-heading mapping-heading">
+                <div>
+                  <p className="eyebrow">Review Mapping</p>
+                  <h2>Match your columns before import</h2>
+                </div>
+                <div className="mapping-actions">
+                  <button className="ghost-button" onClick={() => setPendingImport(null)}>
+                    Cancel
+                  </button>
+                  <button className="primary-button" onClick={applyPendingImport}>
+                    Import {pendingImport.rows.length} rows
+                  </button>
+                </div>
+              </div>
+
+              <div className="mapping-summary">
+                <div className="mapping-chip">
+                  <span>Mapped fields</span>
+                  <strong>{pendingImportSummary.mappedFields.length}</strong>
+                </div>
+                <div className="mapping-chip">
+                  <span>Unmatched columns</span>
+                  <strong>{pendingImportSummary.unmatchedColumns.length}</strong>
+                </div>
+                <div className="mapping-chip">
+                  <span>Source</span>
+                  <strong>{pendingImport.sourceLabel}</strong>
+                </div>
+              </div>
+
+              <div className="mapping-grid">
+                {FIELD_KEYS.map((field) => (
+                  <label key={field} className="mapping-card">
+                    <span>{fieldLabels[field]}</span>
+                    <select
+                      value={pendingImport.fieldMap[field]}
+                      onChange={(event) => updatePendingImportField(field, event.target.value)}
+                    >
+                      <option value="">Leave unmapped</option>
+                      {pendingImport.headers.map((header) => (
+                        <option key={`${field}-${header}`} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mapping-preview-grid">
+                <div className="mapping-preview-card">
+                  <h3>Unmatched columns</h3>
+                  <div className="mapping-tags">
+                    {pendingImportSummary.unmatchedColumns.length > 0 ? (
+                      pendingImportSummary.unmatchedColumns.map((column) => (
+                        <span key={column} className="tag">
+                          {column}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="tag tag-success">All detected headers are mapped</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mapping-preview-card">
+                  <h3>Preview rows</h3>
+                  <div className="preview-table-scroll">
+                    <table className="preview-table">
+                      <thead>
+                        <tr>
+                          {pendingImport.headers.slice(0, 6).map((header) => (
+                            <th key={header}>{header}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingImportPreview.map((row, index) => (
+                          <tr key={`preview-${index}`}>
+                            {pendingImport.headers.slice(0, 6).map((header) => (
+                              <td key={`${index}-${header}`}>{readMappedValue(row, header) || "—"}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="panel">
@@ -460,9 +640,12 @@ function loadInitialRecords() {
   }
 }
 
-function normalizeImportedRows(rows: RawRow[], sourceLabel: string) {
+function normalizeImportedRows(
+  rows: RawRow[],
+  sourceLabel: string,
+  fieldMap: Record<FieldKey, string>,
+) {
   const headers = Object.keys(rows[0] ?? {});
-  const fieldMap = buildFieldMap(headers);
   const mappedFields = Object.entries(fieldMap)
     .filter(([, header]) => Boolean(header))
     .map(([field]) => field);
@@ -515,9 +698,9 @@ function buildFieldMap(headers: string[]) {
     normalized: normalizeHeader(header),
   }));
 
-  const fieldMap = {} as Record<keyof Omit<JobRecord, "id">, string>;
+  const fieldMap = {} as Record<FieldKey, string>;
 
-  (Object.keys(fieldMatchers) as Array<keyof Omit<JobRecord, "id">>).forEach((field) => {
+  FIELD_KEYS.forEach((field) => {
     let bestHeader = "";
     let bestScore = 0;
 
@@ -544,6 +727,15 @@ function buildFieldMap(headers: string[]) {
   });
 
   return fieldMap;
+}
+
+function summarizeFieldMap(headers: string[], fieldMap: Record<FieldKey, string>) {
+  return {
+    mappedFields: Object.entries(fieldMap)
+      .filter(([, header]) => Boolean(header))
+      .map(([field]) => field),
+    unmatchedColumns: headers.filter((header) => !Object.values(fieldMap).includes(header)),
+  };
 }
 
 function readMappedValue(row: RawRow, header: string) {

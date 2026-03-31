@@ -27,7 +27,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -217,7 +218,8 @@ button {
 }
 
 .upload-card input[type="text"],
-.upload-card input:not([type="file"]) {
+.upload-card input:not([type="file"]),
+.mapping-card select {
   width: 100%;
   border-radius: 14px;
   border: 1px solid var(--line);
@@ -285,6 +287,113 @@ table td {
   padding-bottom: 12px;
 }
 
+.mapping-panel {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.mapping-heading {
+  margin-bottom: 16px;
+}
+
+.mapping-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mapping-summary,
+.mapping-grid,
+.mapping-preview-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.mapping-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.mapping-chip,
+.mapping-card,
+.mapping-preview-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.56);
+  padding: 16px;
+}
+
+.mapping-chip strong,
+.mapping-card span,
+.mapping-preview-card h3 {
+  display: block;
+}
+
+.mapping-chip strong {
+  margin-top: 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.4rem;
+}
+
+.mapping-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.mapping-card {
+  display: grid;
+  gap: 10px;
+}
+
+.mapping-card span {
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.mapping-preview-grid {
+  grid-template-columns: 0.8fr 1.2fr;
+}
+
+.mapping-preview-card h3 {
+  margin: 0 0 14px;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.mapping-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(29, 36, 51, 0.08);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.tag-success {
+  background: rgba(30, 123, 116, 0.14);
+  color: var(--teal);
+}
+
+.preview-table-scroll {
+  overflow-x: auto;
+}
+
+.preview-table {
+  min-width: 100%;
+}
+
+.preview-table td,
+.preview-table th {
+  white-space: nowrap;
+}
+
 .table-scroll {
   overflow-x: auto;
 }
@@ -326,7 +435,10 @@ td textarea {
   .hero,
   .import-grid,
   .highlight-grid,
-  .metric-grid {
+  .metric-grid,
+  .mapping-summary,
+  .mapping-grid,
+  .mapping-preview-grid {
     grid-template-columns: 1fr;
   }
 
