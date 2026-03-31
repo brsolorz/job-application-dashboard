@@ -27,13 +27,17 @@ type ImportSummary = {
 
 type RawRow = Record<string, unknown>;
 type FieldKey = keyof Omit<JobRecord, "id">;
+type DateResolution =
+  | { kind: "year"; year: string }
+  | { kind: "nearestPast" }
+  | { kind: "sequence"; startYear: string };
 
 type PendingImport = {
   rows: RawRow[];
   sourceLabel: string;
   headers: string[];
   fieldMap: Record<FieldKey, string>;
-  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>;
+  dateResolutions: Partial<Record<FieldKey, DateResolution>>;
 };
 
 type AmbiguousDatePreview = {
@@ -41,6 +45,8 @@ type AmbiguousDatePreview = {
   header: string;
   count: number;
   samples: string[];
+  supportsSequence: boolean;
+  wrapCount: number;
 };
 
 const STORAGE_KEY = "job-dashboard-records";
@@ -241,7 +247,55 @@ function App() {
             ...current,
             dateResolutions: {
               ...current.dateResolutions,
-              [field]: year,
+              [field]: { kind: "year", year },
+            },
+          }
+        : null,
+    );
+  }
+
+  function updatePendingDateResolutionMode(
+    field: FieldKey,
+    mode: "keep" | "nearestPast" | "year" | "sequence",
+  ) {
+    setPendingImport((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const nextResolutions = { ...current.dateResolutions };
+
+      if (mode === "keep") {
+        delete nextResolutions[field];
+      } else if (mode === "nearestPast") {
+        nextResolutions[field] = { kind: "nearestPast" };
+      } else if (mode === "sequence") {
+        nextResolutions[field] = {
+          kind: "sequence",
+          startYear: getResolutionYear(current.dateResolutions[field]) ?? String(new Date().getFullYear()),
+        };
+      } else {
+        nextResolutions[field] = {
+          kind: "year",
+          year: getResolutionYear(current.dateResolutions[field]) ?? String(new Date().getFullYear()),
+        };
+      }
+
+      return {
+        ...current,
+        dateResolutions: nextResolutions,
+      };
+    });
+  }
+
+  function updatePendingSequenceStartYear(field: FieldKey, startYear: string) {
+    setPendingImport((current) =>
+      current
+        ? {
+            ...current,
+            dateResolutions: {
+              ...current.dateResolutions,
+              [field]: { kind: "sequence", startYear },
             },
           }
         : null,
@@ -260,7 +314,7 @@ function App() {
         {},
       );
 
-      const nextResolutions: Partial<Record<FieldKey, string | "nearestPast">> = {
+      const nextResolutions: Partial<Record<FieldKey, DateResolution>> = {
         ...current.dateResolutions,
       };
 
@@ -545,21 +599,59 @@ function App() {
                             {` "${item.header}"`}
                           </span>
                           <span>Examples: {item.samples.join(", ")}</span>
+                          {item.supportsSequence ? (
+                            <span>
+                              Detected {item.wrapCount} year wrap{item.wrapCount === 1 ? "" : "s"} in
+                              chronological order.
+                            </span>
+                          ) : null}
                         </div>
-                        <select
-                          value={pendingImport.dateResolutions[item.field] ?? ""}
-                          onChange={(event) =>
-                            updatePendingDateResolution(item.field, event.target.value)
-                          }
-                        >
-                          <option value="">Keep as written</option>
-                          <option value="nearestPast">Use nearest past year</option>
-                          {resolutionYears.map((year) => (
-                            <option key={`${item.field}-${year}`} value={year}>
-                              Use {year} for all
-                            </option>
-                          ))}
-                        </select>
+                        <div className="resolution-controls">
+                          <select
+                            value={getResolutionMode(pendingImport.dateResolutions[item.field])}
+                            onChange={(event) =>
+                              updatePendingDateResolutionMode(
+                                item.field,
+                                event.target.value as "keep" | "nearestPast" | "year" | "sequence",
+                              )
+                            }
+                          >
+                            <option value="keep">Keep as written</option>
+                            <option value="nearestPast">Use nearest past year</option>
+                            <option value="year">Use one year for all</option>
+                            {item.supportsSequence ? (
+                              <option value="sequence">Start at year and roll forward</option>
+                            ) : null}
+                          </select>
+                          {getResolutionMode(pendingImport.dateResolutions[item.field]) === "year" ? (
+                            <select
+                              value={getResolutionYear(pendingImport.dateResolutions[item.field]) ?? ""}
+                              onChange={(event) =>
+                                updatePendingDateResolution(item.field, event.target.value)
+                              }
+                            >
+                              {resolutionYears.map((year) => (
+                                <option key={`${item.field}-single-${year}`} value={year}>
+                                  {year}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                          {getResolutionMode(pendingImport.dateResolutions[item.field]) === "sequence" ? (
+                            <select
+                              value={getResolutionYear(pendingImport.dateResolutions[item.field]) ?? ""}
+                              onChange={(event) =>
+                                updatePendingSequenceStartYear(item.field, event.target.value)
+                              }
+                            >
+                              {resolutionYears.map((year) => (
+                                <option key={`${item.field}-sequence-${year}`} value={year}>
+                                  Start at {year}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -900,7 +992,7 @@ function normalizeImportedRows(
   rows: RawRow[],
   sourceLabel: string,
   fieldMap: Record<FieldKey, string>,
-  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>,
+  dateResolutions: Partial<Record<FieldKey, DateResolution>>,
 ) {
   const headers = Object.keys(rows[0] ?? {});
   const mappedFields = Object.entries(fieldMap)
@@ -912,6 +1004,7 @@ function normalizeImportedRows(
   );
 
   let ambiguousDateCount = 0;
+  const sequenceState = initializeSequenceState(dateResolutions);
 
   const records = rows
     .map((row) => {
@@ -923,16 +1016,19 @@ function normalizeImportedRows(
         "appliedDate",
         appliedDate,
         dateResolutions,
+        sequenceState,
       );
       const resolvedNextActionDue = applyDateResolution(
         "nextActionDue",
         nextActionDue,
         dateResolutions,
+        sequenceState,
       );
       const resolvedLastUpdated = applyDateResolution(
         "lastUpdated",
         lastUpdated,
         dateResolutions,
+        sequenceState,
       );
 
       ambiguousDateCount += Number(resolvedAppliedDate.wasAmbiguous);
@@ -1025,7 +1121,7 @@ function summarizeFieldMap(headers: string[], fieldMap: Record<FieldKey, string>
 function inspectAmbiguousDates(
   rows: RawRow[],
   fieldMap: Record<FieldKey, string>,
-  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>,
+  dateResolutions: Partial<Record<FieldKey, DateResolution>>,
 ) {
   const dateFields: FieldKey[] = ["appliedDate", "nextActionDue", "lastUpdated"];
   const previews: AmbiguousDatePreview[] = [];
@@ -1038,6 +1134,8 @@ function inspectAmbiguousDates(
 
     const samples = new Set<string>();
     let count = 0;
+    let wrapCount = 0;
+    let previousComparable: number | null = null;
 
     rows.forEach((row) => {
       const rawValue = readMappedValue(row, header);
@@ -1051,6 +1149,15 @@ function inspectAmbiguousDates(
         if (samples.size < 3) {
           samples.add(rawValue);
         }
+
+        const comparable = getMonthDayComparable(rawValue);
+        if (comparable !== null && previousComparable !== null && comparable < previousComparable) {
+          wrapCount += 1;
+        }
+
+        if (comparable !== null) {
+          previousComparable = comparable;
+        }
       }
     });
 
@@ -1060,6 +1167,8 @@ function inspectAmbiguousDates(
         header,
         count,
         samples: Array.from(samples),
+        supportsSequence: wrapCount > 0,
+        wrapCount,
       });
     }
   });
@@ -1126,25 +1235,33 @@ function normalizeDate(value: string) {
 function applyDateResolution(
   field: FieldKey,
   normalized: { value: string; wasAmbiguous: boolean },
-  dateResolutions: Partial<Record<FieldKey, string | "nearestPast">>,
+  dateResolutions: Partial<Record<FieldKey, DateResolution>>,
+  sequenceState: Partial<Record<FieldKey, { currentYear: number; previousComparable: number | null }>>,
 ) {
   if (!normalized.wasAmbiguous) {
     return normalized;
   }
 
-  const year = dateResolutions[field];
-  if (!year) {
+  const resolution = dateResolutions[field];
+  if (!resolution) {
     return normalized;
   }
 
-  if (year === "nearestPast") {
+  if (resolution.kind === "nearestPast") {
     return {
       value: applyNearestPastYear(normalized.value),
       wasAmbiguous: false,
     };
   }
 
-  const resolved = normalizeDate(`${normalized.value}/${year}`);
+  if (resolution.kind === "sequence") {
+    return {
+      value: applySequenceYear(field, normalized.value, sequenceState),
+      wasAmbiguous: false,
+    };
+  }
+
+  const resolved = normalizeDate(`${normalized.value}/${resolution.year}`);
   return {
     value: resolved.value,
     wasAmbiguous: false,
@@ -1159,10 +1276,10 @@ function buildResolutionYears() {
 function resolveYearForStrategy(strategy: "current" | "nearestPast") {
   const currentYear = new Date().getFullYear();
   if (strategy === "current") {
-    return String(currentYear);
+    return { kind: "year", year: String(currentYear) } satisfies DateResolution;
   }
 
-  return "nearestPast";
+  return { kind: "nearestPast" } satisfies DateResolution;
 }
 
 function applyNearestPastYear(value: string) {
@@ -1183,6 +1300,87 @@ function applyNearestPastYear(value: string) {
       : currentYear;
 
   return `${resolvedYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function initializeSequenceState(dateResolutions: Partial<Record<FieldKey, DateResolution>>) {
+  const state: Partial<
+    Record<FieldKey, { currentYear: number; previousComparable: number | null }>
+  > = {};
+
+  Object.entries(dateResolutions).forEach(([field, resolution]) => {
+    if (resolution?.kind === "sequence") {
+      state[field as FieldKey] = {
+        currentYear: Number(resolution.startYear),
+        previousComparable: null,
+      };
+    }
+  });
+
+  return state;
+}
+
+function applySequenceYear(
+  field: FieldKey,
+  value: string,
+  sequenceState: Partial<Record<FieldKey, { currentYear: number; previousComparable: number | null }>>,
+) {
+  const state = sequenceState[field];
+  const match = value.match(/^(\d{1,2})[/-](\d{1,2})$/);
+  if (!state || !match) {
+    return value;
+  }
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const comparable = month * 100 + day;
+
+  if (state.previousComparable !== null && comparable < state.previousComparable) {
+    state.currentYear += 1;
+  }
+
+  state.previousComparable = comparable;
+  return `${state.currentYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getMonthDayComparable(value: string) {
+  const match = value.match(/^(\d{1,2})[/-](\d{1,2})$/);
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1]) * 100 + Number(match[2]);
+}
+
+function getResolutionMode(resolution?: DateResolution) {
+  if (!resolution) {
+    return "keep";
+  }
+
+  if (resolution.kind === "nearestPast") {
+    return "nearestPast";
+  }
+
+  if (resolution.kind === "sequence") {
+    return "sequence";
+  }
+
+  return "year";
+}
+
+function getResolutionYear(resolution?: DateResolution) {
+  if (!resolution) {
+    return null;
+  }
+
+  if (resolution.kind === "year") {
+    return resolution.year;
+  }
+
+  if (resolution.kind === "sequence") {
+    return resolution.startYear;
+  }
+
+  return null;
 }
 
 function isMonthDayWithoutYear(value: string) {
