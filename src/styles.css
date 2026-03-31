@@ -257,8 +257,7 @@ button {
   gap: 14px;
 }
 
-.highlight-card li,
-table td {
+.highlight-card li {
   border-top: 1px solid var(--line);
   padding-top: 14px;
 }
@@ -400,13 +399,14 @@ table td {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 960px;
 }
 
 th {
   text-align: left;
-  padding-bottom: 12px;
+  padding: 0 14px 14px;
   color: var(--muted);
   font-size: 0.85rem;
   text-transform: uppercase;
@@ -415,6 +415,8 @@ th {
 
 td {
   vertical-align: top;
+  padding: 16px 14px;
+  border-top: 1px solid var(--line);
 }
 
 td input,
@@ -429,6 +431,80 @@ td textarea {
 td textarea {
   resize: vertical;
   min-height: 84px;
+}
+
+.table-row {
+  transition: background 140ms ease;
+}
+
+.table-row:hover td {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.table-row-editing td {
+  background: rgba(209, 91, 39, 0.06);
+}
+
+.table-cell-stack {
+  display: grid;
+  gap: 4px;
+}
+
+.table-cell-stack strong {
+  font-size: 0.98rem;
+}
+
+.table-cell-stack span,
+.cell-text {
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.45;
+}
+
+.cell-notes {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 280px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  background: rgba(29, 36, 51, 0.08);
+}
+
+.status-interviewing,
+.status-take-home,
+.status-offer {
+  background: rgba(30, 123, 116, 0.14);
+  color: var(--teal);
+}
+
+.status-rejected {
+  background: rgba(209, 91, 39, 0.14);
+  color: var(--accent);
+}
+
+.status-applied {
+  background: rgba(29, 36, 51, 0.08);
+  color: var(--text);
+}
+
+.row-actions,
+.stacked-edit-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.row-button {
+  width: 100%;
+  padding: 10px 14px;
 }
 
 @media (max-width: 960px) {

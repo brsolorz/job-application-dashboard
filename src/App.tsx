@@ -132,6 +132,8 @@ function App() {
   const [importMessage, setImportMessage] = useState<string>("");
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState<JobRecord | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
@@ -269,41 +271,70 @@ function App() {
     );
   }
 
-  function updateRecord(id: string, field: keyof Omit<JobRecord, "id">, value: string) {
+  function startEditing(record: JobRecord) {
+    setEditingRowId(record.id);
+    setEditingDraft({ ...record });
+  }
+
+  function updateEditingDraft(field: FieldKey, value: string) {
+    setEditingDraft((current) =>
+      current
+        ? {
+            ...current,
+            [field]: value,
+          }
+        : null,
+    );
+  }
+
+  function saveEditingRow() {
+    if (!editingRowId || !editingDraft) {
+      return;
+    }
+
     setRecords((current) =>
       current.map((record) =>
-        record.id === id
+        record.id === editingRowId
           ? {
-              ...record,
-              [field]: value,
-              lastUpdated: field === "lastUpdated" ? value : todayIso(),
+              ...editingDraft,
+              lastUpdated: editingDraft.lastUpdated || todayIso(),
             }
           : record,
       ),
     );
+    setEditingRowId(null);
+    setEditingDraft(null);
+  }
+
+  function cancelEditingRow() {
+    setEditingRowId(null);
+    setEditingDraft(null);
   }
 
   function addBlankRecord() {
+    const newRecord = {
+      id: crypto.randomUUID(),
+      company: "",
+      role: "",
+      status: "Applied",
+      stage: "",
+      appliedDate: todayIso(),
+      location: "",
+      recruiter: "",
+      nextAction: "",
+      nextActionDue: "",
+      notes: "",
+      source: "Manual",
+      link: "",
+      salary: "",
+      lastUpdated: todayIso(),
+    };
+
     setRecords((current) => [
-      {
-        id: crypto.randomUUID(),
-        company: "",
-        role: "",
-        status: "Applied",
-        stage: "",
-        appliedDate: todayIso(),
-        location: "",
-        recruiter: "",
-        nextAction: "",
-        nextActionDue: "",
-        notes: "",
-        source: "Manual",
-        link: "",
-        salary: "",
-        lastUpdated: todayIso(),
-      },
+      newRecord,
       ...current,
     ]);
+    startEditing(newRecord);
   }
 
   const pendingImportPreview = useMemo(() => {
@@ -569,23 +600,108 @@ function App() {
                   <th>Stage</th>
                   <th>Applied</th>
                   <th>To do</th>
-                  <th>Due</th>
                   <th>Recruiter</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
                   <th>Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {records.map((record) => (
-                  <tr key={record.id}>
-                    <td>{renderInput(record, "company", updateRecord)}</td>
-                    <td>{renderInput(record, "role", updateRecord)}</td>
-                    <td>{renderInput(record, "status", updateRecord)}</td>
-                    <td>{renderInput(record, "stage", updateRecord)}</td>
-                    <td>{renderInput(record, "appliedDate", updateRecord, "date")}</td>
-                    <td>{renderInput(record, "nextAction", updateRecord)}</td>
-                    <td>{renderInput(record, "nextActionDue", updateRecord, "date")}</td>
-                    <td>{renderInput(record, "recruiter", updateRecord)}</td>
-                    <td>{renderTextarea(record, "notes", updateRecord)}</td>
+                  <tr
+                    key={record.id}
+                    className={editingRowId === record.id ? "table-row-editing" : "table-row"}
+                  >
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "company", updateEditingDraft)
+                      ) : (
+                        renderPrimaryCell(record.company, record.location)
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "role", updateEditingDraft)
+                      ) : (
+                        renderPrimaryCell(record.role, record.source)
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "status", updateEditingDraft)
+                      ) : (
+                        <span className={`status-pill status-${slugify(record.status)}`}>
+                          {record.status || "—"}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "stage", updateEditingDraft)
+                      ) : (
+                        <span className="cell-text">{record.stage || "—"}</span>
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        <div className="stacked-edit-fields">
+                          {renderEditingInput(editingDraft, "appliedDate", updateEditingDraft, "date")}
+                          {renderEditingInput(editingDraft, "nextActionDue", updateEditingDraft, "date")}
+                        </div>
+                      ) : (
+                        renderPrimaryCell(
+                          record.appliedDate || "—",
+                          record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
+                        )
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "nextAction", updateEditingDraft)
+                      ) : (
+                        <span className="cell-text">{record.nextAction || "—"}</span>
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "recruiter", updateEditingDraft)
+                      ) : (
+                        <span className="cell-text">{record.recruiter || "—"}</span>
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingInput(editingDraft, "lastUpdated", updateEditingDraft, "date")
+                      ) : (
+                        <span className="cell-text">{record.lastUpdated || "—"}</span>
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id ? (
+                        <div className="row-actions">
+                          <button className="ghost-button row-button" onClick={cancelEditingRow}>
+                            Cancel
+                          </button>
+                          <button className="primary-button row-button" onClick={saveEditingRow}>
+                            Save
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="ghost-button row-button"
+                          onClick={() => startEditing(record)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </td>
+                    <td>
+                      {editingRowId === record.id && editingDraft ? (
+                        renderEditingTextarea(editingDraft, "notes", updateEditingDraft)
+                      ) : (
+                        <span className="cell-text cell-notes">{record.notes || "—"}</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -597,32 +713,41 @@ function App() {
   );
 }
 
-function renderInput(
+function renderEditingInput(
   record: JobRecord,
-  field: keyof Omit<JobRecord, "id">,
-  updateRecord: (id: string, field: keyof Omit<JobRecord, "id">, value: string) => void,
+  field: FieldKey,
+  updateRecord: (field: FieldKey, value: string) => void,
   type = "text",
 ) {
   return (
     <input
       type={type}
       value={record[field]}
-      onChange={(event) => updateRecord(record.id, field, event.target.value)}
+      onChange={(event) => updateRecord(field, event.target.value)}
     />
   );
 }
 
-function renderTextarea(
+function renderEditingTextarea(
   record: JobRecord,
-  field: keyof Omit<JobRecord, "id">,
-  updateRecord: (id: string, field: keyof Omit<JobRecord, "id">, value: string) => void,
+  field: FieldKey,
+  updateRecord: (field: FieldKey, value: string) => void,
 ) {
   return (
     <textarea
       rows={3}
       value={record[field]}
-      onChange={(event) => updateRecord(record.id, field, event.target.value)}
+      onChange={(event) => updateRecord(field, event.target.value)}
     />
+  );
+}
+
+function renderPrimaryCell(primary: string, secondary: string) {
+  return (
+    <div className="table-cell-stack">
+      <strong>{primary || "—"}</strong>
+      <span>{secondary || "—"}</span>
+    </div>
   );
 }
 
@@ -857,6 +982,10 @@ function toGoogleSheetCsvUrl(input: string) {
   }
 
   return "";
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 export default App;
