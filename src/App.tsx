@@ -33,15 +33,14 @@ type PendingImport = {
   sourceLabel: string;
   headers: string[];
   fieldMap: Record<FieldKey, string>;
-  dateResolutions: Record<string, string>;
+  dateResolutions: Partial<Record<FieldKey, string>>;
 };
 
 type AmbiguousDatePreview = {
   field: FieldKey;
   header: string;
-  value: string;
-  key: string;
   count: number;
+  samples: string[];
 };
 
 const STORAGE_KEY = "job-dashboard-records";
@@ -235,14 +234,14 @@ function App() {
     );
   }
 
-  function updatePendingDateResolution(key: string, year: string) {
+  function updatePendingDateResolution(field: FieldKey, year: string) {
     setPendingImport((current) =>
       current
         ? {
             ...current,
             dateResolutions: {
               ...current.dateResolutions,
-              [key]: year,
+              [field]: year,
             },
           }
         : null,
@@ -495,25 +494,27 @@ function App() {
                   </p>
                   <div className="resolution-list">
                     {pendingAmbiguousDates.map((item) => (
-                      <div key={item.key} className="resolution-item">
+                      <div key={item.field} className="resolution-item">
                         <div>
                           <strong>
-                            {fieldLabels[item.field]}: {item.value}
+                            {fieldLabels[item.field]}
                           </strong>
                           <span>
-                            Found {item.count} time{item.count === 1 ? "" : "s"}
+                            {item.count} ambiguous value{item.count === 1 ? "" : "s"} in column
+                            {` "${item.header}"`}
                           </span>
+                          <span>Examples: {item.samples.join(", ")}</span>
                         </div>
                         <select
-                          value={pendingImport.dateResolutions[item.key] ?? ""}
+                          value={pendingImport.dateResolutions[item.field] ?? ""}
                           onChange={(event) =>
-                            updatePendingDateResolution(item.key, event.target.value)
+                            updatePendingDateResolution(item.field, event.target.value)
                           }
                         >
                           <option value="">Keep as written</option>
                           {resolutionYears.map((year) => (
-                            <option key={`${item.key}-${year}`} value={year}>
-                              Use {year}
+                            <option key={`${item.field}-${year}`} value={year}>
+                              Use {year} for all
                             </option>
                           ))}
                         </select>
@@ -857,7 +858,7 @@ function normalizeImportedRows(
   rows: RawRow[],
   sourceLabel: string,
   fieldMap: Record<FieldKey, string>,
-  dateResolutions: Record<string, string>,
+  dateResolutions: Partial<Record<FieldKey, string>>,
 ) {
   const headers = Object.keys(rows[0] ?? {});
   const mappedFields = Object.entries(fieldMap)
@@ -982,16 +983,19 @@ function summarizeFieldMap(headers: string[], fieldMap: Record<FieldKey, string>
 function inspectAmbiguousDates(
   rows: RawRow[],
   fieldMap: Record<FieldKey, string>,
-  dateResolutions: Record<string, string>,
+  dateResolutions: Partial<Record<FieldKey, string>>,
 ) {
   const dateFields: FieldKey[] = ["appliedDate", "nextActionDue", "lastUpdated"];
-  const previewMap = new Map<string, AmbiguousDatePreview>();
+  const previews: AmbiguousDatePreview[] = [];
 
   dateFields.forEach((field) => {
     const header = fieldMap[field];
-    if (!header) {
+    if (!header || dateResolutions[field]) {
       return;
     }
+
+    const samples = new Set<string>();
+    let count = 0;
 
     rows.forEach((row) => {
       const rawValue = readMappedValue(row, header);
@@ -1001,23 +1005,24 @@ function inspectAmbiguousDates(
 
       const normalized = normalizeDate(rawValue);
       if (normalized.wasAmbiguous) {
-        const key = buildDateResolutionKey(field, rawValue);
-        if (dateResolutions[key]) {
-          return;
+        count += 1;
+        if (samples.size < 3) {
+          samples.add(rawValue);
         }
-
-        const existing = previewMap.get(key);
-        if (existing) {
-          existing.count += 1;
-          return;
-        }
-
-        previewMap.set(key, { field, header, value: rawValue, key, count: 1 });
       }
     });
+
+    if (count > 0) {
+      previews.push({
+        field,
+        header,
+        count,
+        samples: Array.from(samples),
+      });
+    }
   });
 
-  return Array.from(previewMap.values());
+  return previews;
 }
 
 function readMappedValue(row: RawRow, header: string) {
@@ -1079,13 +1084,13 @@ function normalizeDate(value: string) {
 function applyDateResolution(
   field: FieldKey,
   normalized: { value: string; wasAmbiguous: boolean },
-  dateResolutions: Record<string, string>,
+  dateResolutions: Partial<Record<FieldKey, string>>,
 ) {
   if (!normalized.wasAmbiguous) {
     return normalized;
   }
 
-  const year = dateResolutions[buildDateResolutionKey(field, normalized.value)];
+  const year = dateResolutions[field];
   if (!year) {
     return normalized;
   }
@@ -1095,10 +1100,6 @@ function applyDateResolution(
     value: resolved.value,
     wasAmbiguous: false,
   };
-}
-
-function buildDateResolutionKey(field: FieldKey, value: string) {
-  return `${field}::${value.trim()}`;
 }
 
 function buildResolutionYears() {

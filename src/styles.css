@@ -361,7 +361,7 @@ button {
 }
 
 .mapping-summary {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin-bottom: 16px;
 }
 
@@ -387,13 +387,14 @@ button {
 }
 
 .mapping-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin-bottom: 16px;
 }
 
 .mapping-card {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .mapping-card span {
@@ -402,7 +403,7 @@ button {
 }
 
 .mapping-preview-grid {
-  grid-template-columns: 0.8fr 1.2fr;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .mapping-alert {
@@ -430,10 +431,10 @@ button {
 }
 
 .resolution-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
   gap: 14px;
-  align-items: center;
+  align-items: start;
   padding: 12px 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.68);
@@ -451,7 +452,7 @@ button {
 }
 
 .resolution-item select {
-  min-width: 160px;
+  width: 100%;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: white;
@@ -628,8 +629,7 @@ td textarea {
   }
 
   .resolution-item {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .app-shell {
