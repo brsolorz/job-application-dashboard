@@ -1169,7 +1169,7 @@ function inspectAmbiguousDates(
 
   dateFields.forEach((field) => {
     const header = fieldMap[field];
-    if (!header || dateResolutions[field]) {
+    if (!header) {
       return;
     }
 
