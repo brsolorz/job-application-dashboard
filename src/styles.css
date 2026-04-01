@@ -159,6 +159,41 @@ button {
   padding: 24px;
 }
 
+.table-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.table-search input,
+.table-filters select {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+}
+
+.table-filters {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.table-results-meta {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.compact-empty-state {
+  min-height: auto;
+  padding: 28px 20px;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -905,6 +940,18 @@ td textarea {
 
   .modal-form {
     grid-template-columns: 1fr;
+  }
+
+  .table-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .table-filters {
+    justify-content: stretch;
+  }
+
+  .table-filters > * {
+    flex: 1 1 180px;
   }
 
   .modal-row {

@@ -189,6 +189,9 @@ function App() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<JobRecord | null>(null);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [tableSearch, setTableSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [taskFilter, setTaskFilter] = useState("all");
   const [newCustomColumnName, setNewCustomColumnName] = useState("");
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
   const [pendingColumnDeletionId, setPendingColumnDeletionId] = useState<string | null>(null);
@@ -233,6 +236,25 @@ function App() {
   const todoItems = useMemo(
     () => records.filter((record) => Boolean(record.nextAction.trim())),
     [records],
+  );
+  const filteredRecords = useMemo(
+    () =>
+      records.filter((record) => {
+        const matchesSearch = !tableSearch.trim()
+          ? true
+          : buildSearchText(record).includes(tableSearch.trim().toLowerCase());
+        const matchesStatus =
+          statusFilter === "all" ? true : record.status.toLowerCase() === statusFilter.toLowerCase();
+        const matchesTask =
+          taskFilter === "all"
+            ? true
+            : taskFilter === "withTask"
+              ? Boolean(record.nextAction.trim())
+              : !record.nextAction.trim();
+
+        return matchesSearch && matchesStatus && matchesTask;
+      }),
+    [records, statusFilter, tableSearch, taskFilter],
   );
 
   async function handleGoogleSheetImport() {
@@ -638,6 +660,12 @@ function App() {
   function cancelEditingRow() {
     setEditingRowId(null);
     setEditingDraft(null);
+  }
+
+  function resetTableFilters() {
+    setTableSearch("");
+    setStatusFilter("all");
+    setTaskFilter("all");
   }
 
   function addStatusOption() {
@@ -1206,141 +1234,191 @@ function App() {
               </div>
             </div>
           ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    {!hiddenColumns.includes("company") ? <th>Company</th> : null}
-                    {!hiddenColumns.includes("role") ? <th>Role</th> : null}
-                    {!hiddenColumns.includes("status") ? <th>Status</th> : null}
-                    {!hiddenColumns.includes("appliedDate") ? <th>Applied</th> : null}
-                    {!hiddenColumns.includes("nextAction") ? <th>To do</th> : null}
-                    {visibleCustomColumns.map((column) => (
-                      <th key={column.id}>{column.label}</th>
+            <>
+              <div className="table-toolbar">
+                <div className="table-search">
+                  <input
+                    type="text"
+                    value={tableSearch}
+                    onChange={(event) => setTableSearch(event.target.value)}
+                    placeholder="Search company, role, notes, to do..."
+                  />
+                </div>
+                <div className="table-filters">
+                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                    <option value="all">All statuses</option>
+                    {statusOptions.map((status) => (
+                      <option key={`filter-${status}`} value={status}>
+                        {status}
+                      </option>
                     ))}
-                    {!hiddenColumns.includes("notes") ? <th>Notes</th> : null}
-                    <th className="icon-column" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((record) => (
-                    <tr
-                      key={record.id}
-                      className={editingRowId === record.id ? "table-row-editing" : "table-row"}
-                    >
-                      {!hiddenColumns.includes("company") ? <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft.company, (value) => updateEditingDraft("company", value))
-                        ) : (
-                          renderPrimaryCell(record.company, record.location)
-                        )}
-                      </td> : null}
-                      {!hiddenColumns.includes("role") ? <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft.role, (value) => updateEditingDraft("role", value))
-                        ) : (
-                          renderPrimaryCell(record.role, record.source)
-                        )}
-                      </td> : null}
-                      {!hiddenColumns.includes("status") ? <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          <div className="status-edit-control">
-                            <select
-                              value={editingDraft.status}
-                              onChange={(event) => updateEditingDraft("status", event.target.value)}
-                            >
-                              {statusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <span className={`status-pill status-${slugify(record.status)}`}>
-                            {record.status || "—"}
-                          </span>
-                        )}
-                      </td> : null}
-                      {!hiddenColumns.includes("appliedDate") ? <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(
-                            editingDraft.appliedDate,
-                            (value) => updateEditingDraft("appliedDate", value),
-                            "date",
-                          )
-                        ) : (
-                          <span className="cell-text">{record.appliedDate || "—"}</span>
-                        )}
-                      </td> : null}
-                      {!hiddenColumns.includes("nextAction") ? <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          <div className="stacked-edit-fields">
-                            {renderEditingInput(
-                              editingDraft.nextAction,
-                              (value) => updateEditingDraft("nextAction", value),
+                  </select>
+                  <select value={taskFilter} onChange={(event) => setTaskFilter(event.target.value)}>
+                    <option value="all">All tasks</option>
+                    <option value="withTask">Needs to do</option>
+                    <option value="withoutTask">No to do</option>
+                  </select>
+                  {(tableSearch || statusFilter !== "all" || taskFilter !== "all") ? (
+                    <button className="ghost-button" onClick={resetTableFilters}>
+                      Clear filters
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="table-results-meta">
+                Showing {filteredRecords.length} of {records.length} application
+                {records.length === 1 ? "" : "s"}
+              </div>
+
+              {filteredRecords.length === 0 ? (
+                <div className="empty-state compact-empty-state">
+                  <h3>No matches found</h3>
+                  <p>Try changing your search or filters to see more applications.</p>
+                  <div className="empty-state-actions">
+                    <button className="ghost-button" onClick={resetTableFilters}>
+                      Clear filters
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        {!hiddenColumns.includes("company") ? <th>Company</th> : null}
+                        {!hiddenColumns.includes("role") ? <th>Role</th> : null}
+                        {!hiddenColumns.includes("status") ? <th>Status</th> : null}
+                        {!hiddenColumns.includes("appliedDate") ? <th>Applied</th> : null}
+                        {!hiddenColumns.includes("nextAction") ? <th>To do</th> : null}
+                        {visibleCustomColumns.map((column) => (
+                          <th key={column.id}>{column.label}</th>
+                        ))}
+                        {!hiddenColumns.includes("notes") ? <th>Notes</th> : null}
+                        <th className="icon-column" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRecords.map((record) => (
+                        <tr
+                          key={record.id}
+                          className={editingRowId === record.id ? "table-row-editing" : "table-row"}
+                        >
+                          {!hiddenColumns.includes("company") ? <td>
+                            {editingRowId === record.id && editingDraft ? (
+                              renderEditingInput(editingDraft.company, (value) => updateEditingDraft("company", value))
+                            ) : (
+                              renderPrimaryCell(record.company, record.location)
                             )}
-                            {renderEditingInput(
-                              editingDraft.nextActionDue,
-                              (value) => updateEditingDraft("nextActionDue", value),
-                              "date",
+                          </td> : null}
+                          {!hiddenColumns.includes("role") ? <td>
+                            {editingRowId === record.id && editingDraft ? (
+                              renderEditingInput(editingDraft.role, (value) => updateEditingDraft("role", value))
+                            ) : (
+                              renderPrimaryCell(record.role, record.source)
                             )}
-                          </div>
-                        ) : (
-                          renderPrimaryCell(
-                            record.nextAction || "—",
-                            record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
-                          )
-                        )}
-                      </td> : null}
-                      {visibleCustomColumns.map((column) => (
-                        <td key={`${record.id}-${column.id}`}>
-                          {editingRowId === record.id && editingDraft ? (
-                            renderEditingInput(
-                              editingDraft.customValues[column.id] ?? "",
-                              (value) => updateEditingCustomValue(column.id, value),
-                            )
-                          ) : (
-                            <span className="cell-text">{record.customValues[column.id] || "—"}</span>
-                          )}
-                        </td>
+                          </td> : null}
+                          {!hiddenColumns.includes("status") ? <td>
+                            {editingRowId === record.id && editingDraft ? (
+                              <div className="status-edit-control">
+                                <select
+                                  value={editingDraft.status}
+                                  onChange={(event) => updateEditingDraft("status", event.target.value)}
+                                >
+                                  {statusOptions.map((status) => (
+                                    <option key={status} value={status}>
+                                      {status}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <span className={`status-pill status-${slugify(record.status)}`}>
+                                {record.status || "—"}
+                              </span>
+                            )}
+                          </td> : null}
+                          {!hiddenColumns.includes("appliedDate") ? <td>
+                            {editingRowId === record.id && editingDraft ? (
+                              renderEditingInput(
+                                editingDraft.appliedDate,
+                                (value) => updateEditingDraft("appliedDate", value),
+                                "date",
+                              )
+                            ) : (
+                              <span className="cell-text">{record.appliedDate || "—"}</span>
+                            )}
+                          </td> : null}
+                          {!hiddenColumns.includes("nextAction") ? <td>
+                            {editingRowId === record.id && editingDraft ? (
+                              <div className="stacked-edit-fields">
+                                {renderEditingInput(
+                                  editingDraft.nextAction,
+                                  (value) => updateEditingDraft("nextAction", value),
+                                )}
+                                {renderEditingInput(
+                                  editingDraft.nextActionDue,
+                                  (value) => updateEditingDraft("nextActionDue", value),
+                                  "date",
+                                )}
+                              </div>
+                            ) : (
+                              renderPrimaryCell(
+                                record.nextAction || "—",
+                                record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
+                              )
+                            )}
+                          </td> : null}
+                          {visibleCustomColumns.map((column) => (
+                            <td key={`${record.id}-${column.id}`}>
+                              {editingRowId === record.id && editingDraft ? (
+                                renderEditingInput(
+                                  editingDraft.customValues[column.id] ?? "",
+                                  (value) => updateEditingCustomValue(column.id, value),
+                                )
+                              ) : (
+                                <span className="cell-text">{record.customValues[column.id] || "—"}</span>
+                              )}
+                            </td>
+                          ))}
+                          {!hiddenColumns.includes("notes") ? <td>
+                            {editingRowId === record.id && editingDraft ? (
+                              renderEditingTextarea(
+                                editingDraft.notes,
+                                (value) => updateEditingDraft("notes", value),
+                              )
+                            ) : (
+                              <span className="cell-text cell-notes">{record.notes || "—"}</span>
+                            )}
+                          </td> : null}
+                          <td className="icon-cell">
+                            {editingRowId === record.id ? (
+                              <div className="icon-actions">
+                                <button className="ghost-button row-button compact-button" onClick={cancelEditingRow}>
+                                  Cancel
+                                </button>
+                                <button className="primary-button row-button compact-button" onClick={saveEditingRow}>
+                                  Save
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className="icon-button"
+                                onClick={() => startEditing(record)}
+                                aria-label={`Edit ${record.company || record.role || "application"}`}
+                                title="Edit row"
+                              >
+                                <span aria-hidden="true">✎</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
                       ))}
-                      {!hiddenColumns.includes("notes") ? <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingTextarea(
-                            editingDraft.notes,
-                            (value) => updateEditingDraft("notes", value),
-                          )
-                        ) : (
-                          <span className="cell-text cell-notes">{record.notes || "—"}</span>
-                        )}
-                      </td> : null}
-                      <td className="icon-cell">
-                        {editingRowId === record.id ? (
-                          <div className="icon-actions">
-                            <button className="ghost-button row-button compact-button" onClick={cancelEditingRow}>
-                              Cancel
-                            </button>
-                            <button className="primary-button row-button compact-button" onClick={saveEditingRow}>
-                              Save
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            className="icon-button"
-                            onClick={() => startEditing(record)}
-                            aria-label={`Edit ${record.company || record.role || "application"}`}
-                            title="Edit row"
-                          >
-                            <span aria-hidden="true">✎</span>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>
@@ -2070,6 +2148,26 @@ function hasExplicitYear(value: string) {
 
   const lastPart = parts[parts.length - 1] ?? "";
   return /^\d{4}$/.test(lastPart) || /^\d{2}$/.test(lastPart);
+}
+
+function buildSearchText(record: JobRecord) {
+  return [
+    record.company,
+    record.role,
+    record.status,
+    record.appliedDate,
+    record.location,
+    record.nextAction,
+    record.nextActionDue,
+    record.notes,
+    record.source,
+    record.link,
+    record.salary,
+    record.lastUpdated,
+    ...Object.values(record.customValues),
+  ]
+    .join(" ")
+    .toLowerCase();
 }
 
 function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
