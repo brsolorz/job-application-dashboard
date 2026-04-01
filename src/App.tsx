@@ -1,14 +1,34 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
+type StandardFieldKey =
+  | "company"
+  | "role"
+  | "status"
+  | "appliedDate"
+  | "location"
+  | "nextAction"
+  | "nextActionDue"
+  | "notes"
+  | "source"
+  | "link"
+  | "salary"
+  | "lastUpdated";
+
+type DateFieldKey = "appliedDate" | "nextActionDue" | "lastUpdated";
+type FieldKey = StandardFieldKey | `custom:${string}`;
+
+type DateResolution =
+  | { kind: "year"; year: string }
+  | { kind: "nearestPast" }
+  | { kind: "sequence"; startYear: string | null };
+
 type JobRecord = {
   id: string;
   company: string;
   role: string;
   status: string;
-  stage: string;
   appliedDate: string;
   location: string;
-  recruiter: string;
   nextAction: string;
   nextActionDue: string;
   notes: string;
@@ -16,6 +36,18 @@ type JobRecord = {
   link: string;
   salary: string;
   lastUpdated: string;
+  customValues: Record<string, string>;
+};
+
+type CustomColumn = {
+  id: string;
+  label: string;
+  helpText: string;
+};
+
+type PersistedDashboard = {
+  records: JobRecord[];
+  customColumns: CustomColumn[];
 };
 
 type ImportSummary = {
@@ -26,22 +58,17 @@ type ImportSummary = {
 };
 
 type RawRow = Record<string, unknown>;
-type FieldKey = keyof Omit<JobRecord, "id">;
-type DateResolution =
-  | { kind: "year"; year: string }
-  | { kind: "nearestPast" }
-  | { kind: "sequence"; startYear: string | null };
 
 type PendingImport = {
   rows: RawRow[];
   sourceLabel: string;
   headers: string[];
-  fieldMap: Record<FieldKey, string>;
-  dateResolutions: Partial<Record<FieldKey, DateResolution>>;
+  fieldMap: Record<string, string>;
+  dateResolutions: Partial<Record<DateFieldKey, DateResolution>>;
 };
 
 type AmbiguousDatePreview = {
-  field: FieldKey;
+  field: DateFieldKey;
   header: string;
   count: number;
   samples: string[];
@@ -49,46 +76,109 @@ type AmbiguousDatePreview = {
   wrapCount: number;
 };
 
+type ImportFieldDefinition = {
+  key: FieldKey;
+  label: string;
+  helpText: string;
+  matchers: string[];
+  isDate?: boolean;
+  isCustom?: boolean;
+};
+
 const STORAGE_KEY = "job-dashboard-records";
 
-const fieldLabels: Record<FieldKey, string> = {
-  company: "Company",
-  role: "Role",
-  status: "Status",
-  stage: "Stage",
-  appliedDate: "Applied date",
-  location: "Location",
-  recruiter: "Recruiter",
-  nextAction: "Next action",
-  nextActionDue: "Next action due",
-  notes: "Notes",
-  source: "Source",
-  link: "Job link",
-  salary: "Salary",
-  lastUpdated: "Last updated",
-};
+const STANDARD_FIELDS: Array<{
+  key: StandardFieldKey;
+  label: string;
+  helpText: string;
+  matchers: string[];
+  isDate?: boolean;
+}> = [
+  {
+    key: "company",
+    label: "Company",
+    helpText: "The employer or organization you applied to.",
+    matchers: ["company", "employer", "organization", "org"],
+  },
+  {
+    key: "role",
+    label: "Role",
+    helpText: "The job title or position name.",
+    matchers: ["role", "title", "position", "job", "job title"],
+  },
+  {
+    key: "status",
+    label: "Status",
+    helpText: "Your current pipeline state, like Applied, Interviewing, Offer, or Rejected.",
+    matchers: ["status", "application status", "state", "outcome", "stage", "pipeline", "process"],
+  },
+  {
+    key: "appliedDate",
+    label: "Applied date",
+    helpText: "When you applied or first entered the opportunity.",
+    matchers: ["applied", "application date", "date applied", "submitted"],
+    isDate: true,
+  },
+  {
+    key: "location",
+    label: "Location",
+    helpText: "City, office, or remote/hybrid setup.",
+    matchers: ["location", "city", "remote", "hybrid"],
+  },
+  {
+    key: "nextAction",
+    label: "To do task",
+    helpText: "The next action you need to take, like sending availability or finishing a take-home.",
+    matchers: ["todo", "to do", "next step", "action item", "follow up", "task"],
+  },
+  {
+    key: "nextActionDue",
+    label: "To do date",
+    helpText: "When that next action is due.",
+    matchers: ["due", "deadline", "next action due", "follow up by"],
+    isDate: true,
+  },
+  {
+    key: "notes",
+    label: "Notes",
+    helpText: "Freeform details, context, or reminders.",
+    matchers: ["notes", "comment", "details", "summary"],
+  },
+  {
+    key: "source",
+    label: "Source",
+    helpText: "Where the job came from, like LinkedIn, referral, or company site.",
+    matchers: ["source", "referral", "board", "where found"],
+  },
+  {
+    key: "link",
+    label: "Job link",
+    helpText: "A URL to the job posting or application.",
+    matchers: ["link", "url", "posting", "job link"],
+  },
+  {
+    key: "salary",
+    label: "Salary",
+    helpText: "Compensation or pay range information.",
+    matchers: ["salary", "comp", "compensation", "pay"],
+  },
+  {
+    key: "lastUpdated",
+    label: "Last updated",
+    helpText: "The last time this application was updated in your source sheet.",
+    matchers: ["updated", "last touch", "last update", "recent touch"],
+    isDate: true,
+  },
+];
 
-const fieldMatchers: Record<keyof Omit<JobRecord, "id">, string[]> = {
-  company: ["company", "employer", "organization", "org"],
-  role: ["role", "title", "position", "job", "job title"],
-  status: ["status", "application status", "state", "outcome"],
-  stage: ["stage", "interview stage", "pipeline", "process"],
-  appliedDate: ["applied", "application date", "date applied", "submitted"],
-  location: ["location", "city", "remote", "hybrid"],
-  recruiter: ["recruiter", "contact", "hiring manager", "talent", "owner"],
-  nextAction: ["todo", "to do", "next step", "action item", "follow up", "task"],
-  nextActionDue: ["due", "deadline", "next action due", "follow up by"],
-  notes: ["notes", "comment", "details", "summary"],
-  source: ["source", "referral", "board", "where found"],
-  link: ["link", "url", "posting", "job link"],
-  salary: ["salary", "comp", "compensation", "pay"],
-  lastUpdated: ["updated", "last touch", "last update", "recent touch"],
-};
-
-const FIELD_KEYS = Object.keys(fieldMatchers) as FieldKey[];
+const TABLE_CUSTOM_COLUMN_LIMIT = 4;
 
 function App() {
-  const [records, setRecords] = useState<JobRecord[]>(() => loadInitialRecords());
+  const initialState = useMemo(() => loadInitialDashboard(), []);
+  const [records, setRecords] = useState<JobRecord[]>(initialState.records);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>(initialState.customColumns);
+  const [newColumnLabel, setNewColumnLabel] = useState("");
+  const [newColumnHelpText, setNewColumnHelpText] = useState("");
   const [googleSheetUrl, setGoogleSheetUrl] = useState("");
   const [importMessage, setImportMessage] = useState<string>("");
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
@@ -97,12 +187,25 @@ function App() {
   const [editingDraft, setEditingDraft] = useState<JobRecord | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  }, [records]);
+    const payload: PersistedDashboard = {
+      records,
+      customColumns,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }, [records, customColumns]);
+
+  const importFields = useMemo(
+    () => buildImportFields(customColumns),
+    [customColumns],
+  );
+  const visibleCustomColumns = useMemo(
+    () => customColumns.slice(0, TABLE_CUSTOM_COLUMN_LIMIT),
+    [customColumns],
+  );
 
   const stats = useMemo(() => computeStats(records), [records]);
   const activeInterviews = useMemo(
-    () => records.filter((record) => isActiveProcess(record.status, record.stage)),
+    () => records.filter((record) => isActiveProcess(record.status)),
     [records],
   );
   const todoItems = useMemo(
@@ -194,7 +297,7 @@ function App() {
       rows,
       sourceLabel,
       headers,
-      fieldMap: buildFieldMap(headers),
+      fieldMap: buildFieldMap(headers, importFields),
       dateResolutions: {},
     });
     setImportMessage(
@@ -212,7 +315,9 @@ function App() {
       pendingImport.sourceLabel,
       pendingImport.fieldMap,
       pendingImport.dateResolutions,
+      customColumns,
     );
+
     setRecords((current) => mergeRecords(current, result.records));
     setImportMessage(
       `Imported ${result.summary.importedCount} rows. Mapped ${result.summary.mappedFields.join(", ") || "no known fields"}.${
@@ -240,7 +345,7 @@ function App() {
     );
   }
 
-  function updatePendingDateResolution(field: FieldKey, year: string) {
+  function updatePendingDateResolution(field: DateFieldKey, year: string) {
     setPendingImport((current) =>
       current
         ? {
@@ -255,7 +360,7 @@ function App() {
   }
 
   function updatePendingDateResolutionMode(
-    field: FieldKey,
+    field: DateFieldKey,
     mode: "keep" | "nearestPast" | "year" | "sequence",
   ) {
     setPendingImport((current) => {
@@ -264,7 +369,6 @@ function App() {
       }
 
       const nextResolutions = { ...current.dateResolutions };
-
       if (mode === "keep") {
         delete nextResolutions[field];
       } else if (mode === "nearestPast") {
@@ -291,7 +395,7 @@ function App() {
     });
   }
 
-  function updatePendingSequenceStartYear(field: FieldKey, startYear: string) {
+  function updatePendingSequenceStartYear(field: DateFieldKey, startYear: string) {
     setPendingImport((current) =>
       current
         ? {
@@ -316,8 +420,7 @@ function App() {
         current.fieldMap,
         {},
       );
-
-      const nextResolutions: Partial<Record<FieldKey, DateResolution>> = {
+      const nextResolutions: Partial<Record<DateFieldKey, DateResolution>> = {
         ...current.dateResolutions,
       };
 
@@ -339,7 +442,7 @@ function App() {
       }
 
       const previews = inspectAmbiguousDates(current.rows, current.fieldMap, {});
-      const nextResolutions: Partial<Record<FieldKey, DateResolution>> = {
+      const nextResolutions: Partial<Record<DateFieldKey, DateResolution>> = {
         ...current.dateResolutions,
       };
 
@@ -360,17 +463,104 @@ function App() {
     });
   }
 
-  function startEditing(record: JobRecord) {
-    setEditingRowId(record.id);
-    setEditingDraft({ ...record });
+  function addCustomColumn() {
+    const label = newColumnLabel.trim();
+    if (!label) {
+      return;
+    }
+
+    const nextColumn: CustomColumn = {
+      id: crypto.randomUUID(),
+      label,
+      helpText: newColumnHelpText.trim() || `Custom field for ${label}.`,
+    };
+
+    setCustomColumns((current) => [...current, nextColumn]);
+    setPendingImport((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const key = toCustomFieldKey(nextColumn.id);
+      const guessedHeader = guessHeaderForCustomField(current.headers, nextColumn);
+      return {
+        ...current,
+        fieldMap: {
+          ...current.fieldMap,
+          [key]: guessedHeader,
+        },
+      };
+    });
+    setNewColumnLabel("");
+    setNewColumnHelpText("");
   }
 
-  function updateEditingDraft(field: FieldKey, value: string) {
+  function removeCustomColumn(columnId: string) {
+    setCustomColumns((current) => current.filter((column) => column.id !== columnId));
+    setRecords((current) =>
+      current.map((record) => {
+        const nextCustomValues = { ...record.customValues };
+        delete nextCustomValues[columnId];
+        return {
+          ...record,
+          customValues: nextCustomValues,
+        };
+      }),
+    );
+    setPendingImport((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const nextFieldMap = { ...current.fieldMap };
+      delete nextFieldMap[toCustomFieldKey(columnId)];
+      return {
+        ...current,
+        fieldMap: nextFieldMap,
+      };
+    });
+    setEditingDraft((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const nextCustomValues = { ...current.customValues };
+      delete nextCustomValues[columnId];
+      return {
+        ...current,
+        customValues: nextCustomValues,
+      };
+    });
+  }
+
+  function startEditing(record: JobRecord) {
+    setEditingRowId(record.id);
+    setEditingDraft({
+      ...record,
+      customValues: { ...record.customValues },
+    });
+  }
+
+  function updateEditingDraft(field: StandardFieldKey, value: string) {
     setEditingDraft((current) =>
       current
         ? {
             ...current,
             [field]: value,
+          }
+        : null,
+    );
+  }
+
+  function updateEditingCustomValue(columnId: string, value: string) {
+    setEditingDraft((current) =>
+      current
+        ? {
+            ...current,
+            customValues: {
+              ...current.customValues,
+              [columnId]: value,
+            },
           }
         : null,
     );
@@ -386,7 +576,7 @@ function App() {
         record.id === editingRowId
           ? {
               ...editingDraft,
-              lastUpdated: editingDraft.lastUpdated || todayIso(),
+              lastUpdated: todayIso(),
             }
           : record,
       ),
@@ -401,28 +591,8 @@ function App() {
   }
 
   function addBlankRecord() {
-    const newRecord = {
-      id: crypto.randomUUID(),
-      company: "",
-      role: "",
-      status: "Applied",
-      stage: "",
-      appliedDate: todayIso(),
-      location: "",
-      recruiter: "",
-      nextAction: "",
-      nextActionDue: "",
-      notes: "",
-      source: "Manual",
-      link: "",
-      salary: "",
-      lastUpdated: todayIso(),
-    };
-
-    setRecords((current) => [
-      newRecord,
-      ...current,
-    ]);
+    const newRecord = createBlankRecord(customColumns);
+    setRecords((current) => [newRecord, ...current]);
     startEditing(newRecord);
   }
 
@@ -430,13 +600,13 @@ function App() {
     const shouldClear = window.confirm(
       "Clear all saved job application data and start over?",
     );
-
     if (!shouldClear) {
       return;
     }
 
     localStorage.removeItem(STORAGE_KEY);
     setRecords([]);
+    setCustomColumns([]);
     setPendingImport(null);
     setEditingRowId(null);
     setEditingDraft(null);
@@ -444,33 +614,30 @@ function App() {
     setImportMessage("All saved data was cleared. Import a new sheet to start again.");
   }
 
-  const pendingImportPreview = useMemo(() => {
-    if (!pendingImport) {
-      return [];
-    }
+  const pendingImportPreview = useMemo(
+    () => (pendingImport ? pendingImport.rows.slice(0, 3) : []),
+    [pendingImport],
+  );
 
-    return pendingImport.rows.slice(0, 3);
-  }, [pendingImport]);
+  const pendingImportSummary = useMemo(
+    () =>
+      pendingImport
+        ? summarizeFieldMap(pendingImport.headers, pendingImport.fieldMap, importFields)
+        : null,
+    [importFields, pendingImport],
+  );
 
-  const pendingImportSummary = useMemo(() => {
-    if (!pendingImport) {
-      return null;
-    }
-
-    return summarizeFieldMap(pendingImport.headers, pendingImport.fieldMap);
-  }, [pendingImport]);
-
-  const pendingAmbiguousDates = useMemo(() => {
-    if (!pendingImport) {
-      return [];
-    }
-
-    return inspectAmbiguousDates(
-      pendingImport.rows,
-      pendingImport.fieldMap,
-      pendingImport.dateResolutions,
-    );
-  }, [pendingImport]);
+  const pendingAmbiguousDates = useMemo(
+    () =>
+      pendingImport
+        ? inspectAmbiguousDates(
+            pendingImport.rows,
+            pendingImport.fieldMap,
+            pendingImport.dateResolutions,
+          )
+        : [],
+    [pendingImport],
+  );
 
   const resolutionYears = useMemo(() => buildResolutionYears(), []);
 
@@ -516,14 +683,64 @@ function App() {
             </button>
           </div>
 
-          {records.length > 0 ? (
+          {records.length > 0 || customColumns.length > 0 ? (
             <div className="danger-zone">
               <button className="danger-button" onClick={clearAllData}>
                 Clear all data
               </button>
-              <span>Wipes the current dashboard so you can import a new tracker.</span>
+              <span>Wipes the current dashboard and custom columns so you can start over.</span>
             </div>
           ) : null}
+
+          <div className="column-manager">
+            <div className="section-heading column-manager-heading">
+              <div>
+                <p className="eyebrow">Columns</p>
+                <h2>Manage custom columns</h2>
+              </div>
+            </div>
+            <p className="column-manager-copy">
+              Add custom columns for fields you care about, map them during import, and keep
+              them visible in the dashboard after import.
+            </p>
+            <div className="column-manager-form">
+              <input
+                value={newColumnLabel}
+                onChange={(event) => setNewColumnLabel(event.target.value)}
+                placeholder="Column name"
+              />
+              <input
+                value={newColumnHelpText}
+                onChange={(event) => setNewColumnHelpText(event.target.value)}
+                placeholder="What this column means"
+              />
+              <button className="primary-button" onClick={addCustomColumn}>
+                Add column
+              </button>
+            </div>
+            <div className="custom-column-list">
+              {customColumns.length > 0 ? (
+                customColumns.map((column) => (
+                  <div key={column.id} className="custom-column-card">
+                    <div>
+                      <strong>{column.label}</strong>
+                      <span>{column.helpText}</span>
+                    </div>
+                    <button
+                      className="ghost-button column-delete-button"
+                      onClick={() => removeCustomColumn(column.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="column-manager-empty">
+                  No custom columns yet. Add one if your sheet tracks more than the default fields.
+                </p>
+              )}
+            </div>
+          </div>
 
           <div className="import-grid">
             <label className="upload-card">
@@ -631,9 +848,7 @@ function App() {
                     {pendingAmbiguousDates.map((item) => (
                       <div key={item.field} className="resolution-item">
                         <div>
-                          <strong>
-                            {fieldLabels[item.field]}
-                          </strong>
+                          <strong>{labelForStandardField(item.field)}</strong>
                           <span>
                             {item.count} ambiguous value{item.count === 1 ? "" : "s"} in column
                             {` "${item.header}"`}
@@ -700,20 +915,34 @@ function App() {
               ) : null}
 
               <div className="mapping-grid">
-                {FIELD_KEYS.map((field) => (
-                  <label key={field} className="mapping-card">
-                    <span>{fieldLabels[field]}</span>
+                {importFields.map((field) => (
+                  <label key={field.key} className="mapping-card">
+                    <div className="mapping-card-header">
+                      <span>{field.label}</span>
+                      <span className="info-badge" title={field.helpText}>
+                        ?
+                      </span>
+                    </div>
+                    <p className="mapping-card-help">{field.helpText}</p>
                     <select
-                      value={pendingImport.fieldMap[field]}
-                      onChange={(event) => updatePendingImportField(field, event.target.value)}
+                      value={pendingImport.fieldMap[field.key] ?? ""}
+                      onChange={(event) => updatePendingImportField(field.key, event.target.value)}
                     >
                       <option value="">Leave unmapped</option>
                       {pendingImport.headers.map((header) => (
-                        <option key={`${field}-${header}`} value={header}>
+                        <option key={`${field.key}-${header}`} value={header}>
                           {header}
                         </option>
                       ))}
                     </select>
+                    {field.isCustom ? (
+                      <button
+                        className="ghost-button mapping-delete-button"
+                        onClick={() => removeCustomColumn(stripCustomPrefix(field.key))}
+                      >
+                        Delete custom column
+                      </button>
+                    ) : null}
                   </label>
                 ))}
               </div>
@@ -777,7 +1006,7 @@ function App() {
                 {activeInterviews.slice(0, 5).map((record) => (
                   <li key={record.id}>
                     <strong>{record.company}</strong>
-                    <span>{record.stage || record.status}</span>
+                    <span>{record.status}</span>
                   </li>
                 ))}
                 {activeInterviews.length === 0 ? (
@@ -860,11 +1089,11 @@ function App() {
                     <th>Company</th>
                     <th>Role</th>
                     <th>Status</th>
-                    <th>Stage</th>
                     <th>Applied</th>
                     <th>To do</th>
-                    <th>Recruiter</th>
-                    <th>Updated</th>
+                    {visibleCustomColumns.map((column) => (
+                      <th key={column.id}>{column.label}</th>
+                    ))}
                     <th>Actions</th>
                     <th>Notes</th>
                   </tr>
@@ -877,21 +1106,21 @@ function App() {
                     >
                       <td>
                         {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "company", updateEditingDraft)
+                          renderEditingInput(editingDraft.company, (value) => updateEditingDraft("company", value))
                         ) : (
                           renderPrimaryCell(record.company, record.location)
                         )}
                       </td>
                       <td>
                         {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "role", updateEditingDraft)
+                          renderEditingInput(editingDraft.role, (value) => updateEditingDraft("role", value))
                         ) : (
                           renderPrimaryCell(record.role, record.source)
                         )}
                       </td>
                       <td>
                         {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "status", updateEditingDraft)
+                          renderEditingInput(editingDraft.status, (value) => updateEditingDraft("status", value))
                         ) : (
                           <span className={`status-pill status-${slugify(record.status)}`}>
                             {record.status || "—"}
@@ -900,45 +1129,47 @@ function App() {
                       </td>
                       <td>
                         {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "stage", updateEditingDraft)
+                          renderEditingInput(
+                            editingDraft.appliedDate,
+                            (value) => updateEditingDraft("appliedDate", value),
+                            "date",
+                          )
                         ) : (
-                          <span className="cell-text">{record.stage || "—"}</span>
+                          <span className="cell-text">{record.appliedDate || "—"}</span>
                         )}
                       </td>
                       <td>
                         {editingRowId === record.id && editingDraft ? (
                           <div className="stacked-edit-fields">
-                            {renderEditingInput(editingDraft, "appliedDate", updateEditingDraft, "date")}
-                            {renderEditingInput(editingDraft, "nextActionDue", updateEditingDraft, "date")}
+                            {renderEditingInput(
+                              editingDraft.nextAction,
+                              (value) => updateEditingDraft("nextAction", value),
+                            )}
+                            {renderEditingInput(
+                              editingDraft.nextActionDue,
+                              (value) => updateEditingDraft("nextActionDue", value),
+                              "date",
+                            )}
                           </div>
                         ) : (
                           renderPrimaryCell(
-                            record.appliedDate || "—",
+                            record.nextAction || "—",
                             record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
                           )
                         )}
                       </td>
-                      <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "nextAction", updateEditingDraft)
-                        ) : (
-                          <span className="cell-text">{record.nextAction || "—"}</span>
-                        )}
-                      </td>
-                      <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "recruiter", updateEditingDraft)
-                        ) : (
-                          <span className="cell-text">{record.recruiter || "—"}</span>
-                        )}
-                      </td>
-                      <td>
-                        {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft, "lastUpdated", updateEditingDraft, "date")
-                        ) : (
-                          <span className="cell-text">{record.lastUpdated || "—"}</span>
-                        )}
-                      </td>
+                      {visibleCustomColumns.map((column) => (
+                        <td key={`${record.id}-${column.id}`}>
+                          {editingRowId === record.id && editingDraft ? (
+                            renderEditingInput(
+                              editingDraft.customValues[column.id] ?? "",
+                              (value) => updateEditingCustomValue(column.id, value),
+                            )
+                          ) : (
+                            <span className="cell-text">{record.customValues[column.id] || "—"}</span>
+                          )}
+                        </td>
+                      ))}
                       <td>
                         {editingRowId === record.id ? (
                           <div className="row-actions">
@@ -948,19 +1179,26 @@ function App() {
                             <button className="primary-button row-button" onClick={saveEditingRow}>
                               Save
                             </button>
+                            <span className="row-meta">Updated on save</span>
                           </div>
                         ) : (
-                          <button
-                            className="ghost-button row-button"
-                            onClick={() => startEditing(record)}
-                          >
-                            Edit
-                          </button>
+                          <div className="row-actions">
+                            <button
+                              className="ghost-button row-button"
+                              onClick={() => startEditing(record)}
+                            >
+                              Edit
+                            </button>
+                            <span className="row-meta">Updated {record.lastUpdated || "—"}</span>
+                          </div>
                         )}
                       </td>
                       <td>
                         {editingRowId === record.id && editingDraft ? (
-                          renderEditingTextarea(editingDraft, "notes", updateEditingDraft)
+                          renderEditingTextarea(
+                            editingDraft.notes,
+                            (value) => updateEditingDraft("notes", value),
+                          )
                         ) : (
                           <span className="cell-text cell-notes">{record.notes || "—"}</span>
                         )}
@@ -978,30 +1216,25 @@ function App() {
 }
 
 function renderEditingInput(
-  record: JobRecord,
-  field: FieldKey,
-  updateRecord: (field: FieldKey, value: string) => void,
+  value: string,
+  updateValue: (value: string) => void,
   type = "text",
 ) {
   return (
     <input
       type={type}
-      value={record[field]}
-      onChange={(event) => updateRecord(field, event.target.value)}
+      value={value}
+      onChange={(event) => updateValue(event.target.value)}
     />
   );
 }
 
-function renderEditingTextarea(
-  record: JobRecord,
-  field: FieldKey,
-  updateRecord: (field: FieldKey, value: string) => void,
-) {
+function renderEditingTextarea(value: string, updateValue: (value: string) => void) {
   return (
     <textarea
       rows={3}
-      value={record[field]}
-      onChange={(event) => updateRecord(field, event.target.value)}
+      value={value}
+      onChange={(event) => updateValue(event.target.value)}
     />
   );
 }
@@ -1015,34 +1248,169 @@ function renderPrimaryCell(primary: string, secondary: string) {
   );
 }
 
-function loadInitialRecords() {
+function loadInitialDashboard(): PersistedDashboard {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
-    return [];
+    return { records: [], customColumns: [] };
   }
 
   try {
-    const parsed = JSON.parse(stored) as JobRecord[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(stored) as PersistedDashboard | JobRecord[];
+    if (Array.isArray(parsed)) {
+      return {
+        records: parsed.map((record) => normalizeLegacyRecord(record)),
+        customColumns: [],
+      };
+    }
+
+    return {
+      records: Array.isArray(parsed.records)
+        ? parsed.records.map((record) => normalizeLegacyRecord(record))
+        : [],
+      customColumns: Array.isArray(parsed.customColumns) ? parsed.customColumns : [],
+    };
   } catch {
-    return [];
+    return { records: [], customColumns: [] };
   }
+}
+
+function normalizeLegacyRecord(record: Partial<JobRecord> & Record<string, unknown>): JobRecord {
+  return {
+    id: typeof record.id === "string" ? record.id : crypto.randomUUID(),
+    company: stringValue(record.company),
+    role: stringValue(record.role),
+    status: stringValue(record.status),
+    appliedDate: stringValue(record.appliedDate),
+    location: stringValue(record.location),
+    nextAction: stringValue(record.nextAction),
+    nextActionDue: stringValue(record.nextActionDue),
+    notes: stringValue(record.notes),
+    source: stringValue(record.source),
+    link: stringValue(record.link),
+    salary: stringValue(record.salary),
+    lastUpdated: stringValue(record.lastUpdated),
+    customValues:
+      typeof record.customValues === "object" && record.customValues !== null
+        ? Object.fromEntries(
+            Object.entries(record.customValues as Record<string, unknown>).map(([key, value]) => [
+              key,
+              stringValue(value),
+            ]),
+          )
+        : {},
+  };
+}
+
+function createBlankRecord(customColumns: CustomColumn[]): JobRecord {
+  return {
+    id: crypto.randomUUID(),
+    company: "",
+    role: "",
+    status: "Applied",
+    appliedDate: todayIso(),
+    location: "",
+    nextAction: "",
+    nextActionDue: "",
+    notes: "",
+    source: "Manual",
+    link: "",
+    salary: "",
+    lastUpdated: todayIso(),
+    customValues: Object.fromEntries(customColumns.map((column) => [column.id, ""])),
+  };
+}
+
+function buildImportFields(customColumns: CustomColumn[]): ImportFieldDefinition[] {
+  const standardFields: ImportFieldDefinition[] = STANDARD_FIELDS.map((field) => ({
+    key: field.key,
+    label: field.label,
+    helpText: field.helpText,
+    matchers: field.matchers,
+    isDate: field.isDate,
+  }));
+
+  const customFields: ImportFieldDefinition[] = customColumns.map((column) => ({
+    key: toCustomFieldKey(column.id),
+    label: column.label,
+    helpText: column.helpText,
+    matchers: [normalizeHeader(column.label)],
+    isCustom: true,
+  }));
+
+  return [...standardFields, ...customFields];
+}
+
+function buildFieldMap(headers: string[], fields: ImportFieldDefinition[]) {
+  const normalizedHeaders = headers.map((header) => ({
+    original: header,
+    normalized: normalizeHeader(header),
+  }));
+
+  const fieldMap: Record<string, string> = {};
+
+  fields.forEach((field) => {
+    let bestHeader = "";
+    let bestScore = 0;
+
+    normalizedHeaders.forEach((header) => {
+      const score = field.matchers.reduce((accumulator, matcher) => {
+        if (header.normalized === matcher) {
+          return accumulator + 100;
+        }
+
+        if (header.normalized.includes(matcher)) {
+          return accumulator + 20;
+        }
+
+        return accumulator;
+      }, 0);
+
+      if (score > bestScore) {
+        bestHeader = header.original;
+        bestScore = score;
+      }
+    });
+
+    fieldMap[field.key] = bestHeader;
+  });
+
+  return fieldMap;
+}
+
+function summarizeFieldMap(
+  headers: string[],
+  fieldMap: Record<string, string>,
+  fields: ImportFieldDefinition[],
+) {
+  const mappedHeaders = new Set(
+    fields.map((field) => fieldMap[field.key]).filter(Boolean),
+  );
+
+  return {
+    mappedFields: fields
+      .filter((field) => Boolean(fieldMap[field.key]))
+      .map((field) => field.label),
+    unmatchedColumns: headers.filter((header) => !mappedHeaders.has(header)),
+  };
 }
 
 function normalizeImportedRows(
   rows: RawRow[],
   sourceLabel: string,
-  fieldMap: Record<FieldKey, string>,
-  dateResolutions: Partial<Record<FieldKey, DateResolution>>,
+  fieldMap: Record<string, string>,
+  dateResolutions: Partial<Record<DateFieldKey, DateResolution>>,
+  customColumns: CustomColumn[],
 ) {
   const headers = Object.keys(rows[0] ?? {});
-  const mappedFields = Object.entries(fieldMap)
-    .filter(([, header]) => Boolean(header))
-    .map(([field]) => field);
+  const importFields = buildImportFields(customColumns);
+  const mappedFields = importFields
+    .filter((field) => Boolean(fieldMap[field.key]))
+    .map((field) => field.label);
 
-  const unmatchedColumns = headers.filter(
-    (header) => !Object.values(fieldMap).includes(header),
+  const mappedHeaders = new Set(
+    importFields.map((field) => fieldMap[field.key]).filter(Boolean),
   );
+  const unmatchedColumns = headers.filter((header) => !mappedHeaders.has(header));
 
   let ambiguousDateCount = 0;
   const sequenceState = initializeSequenceState(dateResolutions);
@@ -1076,15 +1444,20 @@ function normalizeImportedRows(
       ambiguousDateCount += Number(resolvedNextActionDue.wasAmbiguous);
       ambiguousDateCount += Number(resolvedLastUpdated.wasAmbiguous);
 
-      const record: JobRecord = {
+      const customValues = Object.fromEntries(
+        customColumns.map((column) => [
+          column.id,
+          readMappedValue(row, fieldMap[toCustomFieldKey(column.id)]),
+        ]),
+      );
+
+      return {
         id: crypto.randomUUID(),
         company: readMappedValue(row, fieldMap.company),
         role: readMappedValue(row, fieldMap.role),
         status: normalizeStatus(readMappedValue(row, fieldMap.status)),
-        stage: readMappedValue(row, fieldMap.stage),
         appliedDate: resolvedAppliedDate.value,
         location: readMappedValue(row, fieldMap.location),
-        recruiter: readMappedValue(row, fieldMap.recruiter),
         nextAction: readMappedValue(row, fieldMap.nextAction),
         nextActionDue: resolvedNextActionDue.value,
         notes: readMappedValue(row, fieldMap.notes),
@@ -1092,13 +1465,8 @@ function normalizeImportedRows(
         link: readMappedValue(row, fieldMap.link),
         salary: readMappedValue(row, fieldMap.salary),
         lastUpdated: resolvedLastUpdated.value || todayIso(),
-      };
-
-      if (!record.stage && record.status) {
-        record.stage = record.status;
-      }
-
-      return record;
+        customValues,
+      } satisfies JobRecord;
     })
     .filter((record) => record.company || record.role || record.notes);
 
@@ -1113,58 +1481,12 @@ function normalizeImportedRows(
   };
 }
 
-function buildFieldMap(headers: string[]) {
-  const normalizedHeaders = headers.map((header) => ({
-    original: header,
-    normalized: normalizeHeader(header),
-  }));
-
-  const fieldMap = {} as Record<FieldKey, string>;
-
-  FIELD_KEYS.forEach((field) => {
-    let bestHeader = "";
-    let bestScore = 0;
-
-    normalizedHeaders.forEach((header) => {
-      const score = fieldMatchers[field].reduce((accumulator, matcher) => {
-        if (header.normalized === matcher) {
-          return accumulator + 100;
-        }
-
-        if (header.normalized.includes(matcher)) {
-          return accumulator + 20;
-        }
-
-        return accumulator;
-      }, 0);
-
-      if (score > bestScore) {
-        bestHeader = header.original;
-        bestScore = score;
-      }
-    });
-
-    fieldMap[field] = bestHeader;
-  });
-
-  return fieldMap;
-}
-
-function summarizeFieldMap(headers: string[], fieldMap: Record<FieldKey, string>) {
-  return {
-    mappedFields: Object.entries(fieldMap)
-      .filter(([, header]) => Boolean(header))
-      .map(([field]) => field),
-    unmatchedColumns: headers.filter((header) => !Object.values(fieldMap).includes(header)),
-  };
-}
-
 function inspectAmbiguousDates(
   rows: RawRow[],
-  fieldMap: Record<FieldKey, string>,
-  dateResolutions: Partial<Record<FieldKey, DateResolution>>,
+  fieldMap: Record<string, string>,
+  _dateResolutions: Partial<Record<DateFieldKey, DateResolution>>,
 ) {
-  const dateFields: FieldKey[] = ["appliedDate", "nextActionDue", "lastUpdated"];
+  const dateFields: DateFieldKey[] = ["appliedDate", "nextActionDue", "lastUpdated"];
   const previews: AmbiguousDatePreview[] = [];
 
   dateFields.forEach((field) => {
@@ -1226,6 +1548,12 @@ function readMappedValue(row: RawRow, header: string) {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
+function guessHeaderForCustomField(headers: string[], column: CustomColumn) {
+  const normalizedLabel = normalizeHeader(column.label);
+  const matches = headers.find((header) => normalizeHeader(header) === normalizedLabel);
+  return matches ?? "";
+}
+
 function normalizeHeader(header: string) {
   return header.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -1256,7 +1584,6 @@ function normalizeDate(value: string) {
   }
 
   const trimmed = value.trim();
-
   if (isMonthDayWithoutYear(trimmed)) {
     return { value: trimmed, wasAmbiguous: true };
   }
@@ -1274,10 +1601,10 @@ function normalizeDate(value: string) {
 }
 
 function applyDateResolution(
-  field: FieldKey,
+  field: DateFieldKey,
   normalized: { value: string; wasAmbiguous: boolean },
-  dateResolutions: Partial<Record<FieldKey, DateResolution>>,
-  sequenceState: Partial<Record<FieldKey, { currentYear: number; previousComparable: number | null }>>,
+  dateResolutions: Partial<Record<DateFieldKey, DateResolution>>,
+  sequenceState: Partial<Record<DateFieldKey, { currentYear: number; previousComparable: number | null }>>,
 ) {
   if (!normalized.wasAmbiguous) {
     return normalized;
@@ -1299,6 +1626,7 @@ function applyDateResolution(
     if (!resolution.startYear) {
       return normalized;
     }
+
     return {
       value: applySequenceYear(field, normalized.value, sequenceState),
       wasAmbiguous: false,
@@ -1312,18 +1640,23 @@ function applyDateResolution(
   };
 }
 
-function buildResolutionYears() {
-  const currentYear = new Date().getFullYear();
-  return Array.from({ length: 8 }, (_, index) => String(currentYear - 2 + index));
-}
+function initializeSequenceState(dateResolutions: Partial<Record<DateFieldKey, DateResolution>>) {
+  const state: Partial<
+    Record<DateFieldKey, { currentYear: number; previousComparable: number | null }>
+  > = {};
 
-function resolveYearForStrategy(strategy: "current" | "nearestPast") {
-  const currentYear = new Date().getFullYear();
-  if (strategy === "current") {
-    return { kind: "year", year: String(currentYear) } satisfies DateResolution;
-  }
+  (Object.entries(dateResolutions) as Array<[DateFieldKey, DateResolution]>).forEach(
+    ([field, resolution]) => {
+      if (resolution.kind === "sequence" && resolution.startYear) {
+        state[field] = {
+          currentYear: Number(resolution.startYear),
+          previousComparable: null,
+        };
+      }
+    },
+  );
 
-  return { kind: "nearestPast" } satisfies DateResolution;
+  return state;
 }
 
 function applyNearestPastYear(value: string) {
@@ -1346,30 +1679,10 @@ function applyNearestPastYear(value: string) {
   return `${resolvedYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function initializeSequenceState(dateResolutions: Partial<Record<FieldKey, DateResolution>>) {
-  const state: Partial<
-    Record<FieldKey, { currentYear: number; previousComparable: number | null }>
-  > = {};
-
-  Object.entries(dateResolutions).forEach(([field, resolution]) => {
-    if (resolution?.kind === "sequence") {
-      if (!resolution.startYear) {
-        return;
-      }
-      state[field as FieldKey] = {
-        currentYear: Number(resolution.startYear),
-        previousComparable: null,
-      };
-    }
-  });
-
-  return state;
-}
-
 function applySequenceYear(
-  field: FieldKey,
+  field: DateFieldKey,
   value: string,
-  sequenceState: Partial<Record<FieldKey, { currentYear: number; previousComparable: number | null }>>,
+  sequenceState: Partial<Record<DateFieldKey, { currentYear: number; previousComparable: number | null }>>,
 ) {
   const state = sequenceState[field];
   const match = value.match(/^(\d{1,2})[/-](\d{1,2})$/);
@@ -1389,6 +1702,20 @@ function applySequenceYear(
   return `${state.currentYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function buildResolutionYears() {
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: 10 }, (_, index) => String(currentYear - 4 + index));
+}
+
+function resolveYearForStrategy(strategy: "current" | "nearestPast") {
+  const currentYear = new Date().getFullYear();
+  if (strategy === "current") {
+    return { kind: "year", year: String(currentYear) } satisfies DateResolution;
+  }
+
+  return { kind: "nearestPast" } satisfies DateResolution;
+}
+
 function getMonthDayComparable(value: string) {
   const match = value.match(/^(\d{1,2})[/-](\d{1,2})$/);
   if (!match) {
@@ -1396,38 +1723,6 @@ function getMonthDayComparable(value: string) {
   }
 
   return Number(match[1]) * 100 + Number(match[2]);
-}
-
-function getResolutionMode(resolution?: DateResolution) {
-  if (!resolution) {
-    return "keep";
-  }
-
-  if (resolution.kind === "nearestPast") {
-    return "nearestPast";
-  }
-
-  if (resolution.kind === "sequence") {
-    return "sequence";
-  }
-
-  return "year";
-}
-
-function getResolutionYear(resolution?: DateResolution) {
-  if (!resolution) {
-    return null;
-  }
-
-  if (resolution.kind === "year") {
-    return resolution.year;
-  }
-
-  if (resolution.kind === "sequence") {
-    return resolution.startYear;
-  }
-
-  return null;
 }
 
 function isMonthDayWithoutYear(value: string) {
@@ -1461,17 +1756,6 @@ function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
   return merged;
 }
 
-function isActiveProcess(status: string, stage: string) {
-  const value = `${status} ${stage}`.toLowerCase();
-  return (
-    !value.includes("reject") &&
-    !value.includes("withdraw") &&
-    !value.includes("ghost") &&
-    !value.includes("offer accepted") &&
-    (value.includes("interview") || value.includes("onsite") || value.includes("take-home") || value.includes("assessment"))
-  );
-}
-
 function computeStats(records: JobRecord[]) {
   const total = records.length;
   const interviewing = records.filter((record) =>
@@ -1495,8 +1779,15 @@ function computeStats(records: JobRecord[]) {
   };
 }
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+function isActiveProcess(status: string) {
+  const value = status.toLowerCase();
+  return (
+    !value.includes("reject") &&
+    !value.includes("withdraw") &&
+    !value.includes("ghost") &&
+    !value.includes("offer accepted") &&
+    (value.includes("interview") || value.includes("onsite") || value.includes("take-home") || value.includes("assessment") || value.includes("offer"))
+  );
 }
 
 function toGoogleSheetCsvUrl(input: string) {
@@ -1519,8 +1810,54 @@ function toGoogleSheetCsvUrl(input: string) {
   return "";
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : String(value ?? "");
+}
+
+function toCustomFieldKey(columnId: string) {
+  return `custom:${columnId}` as const;
+}
+
+function stripCustomPrefix(fieldKey: FieldKey) {
+  return fieldKey.replace(/^custom:/, "");
+}
+
+function labelForStandardField(field: DateFieldKey) {
+  return STANDARD_FIELDS.find((item) => item.key === field)?.label ?? field;
+}
+
+function getResolutionMode(resolution?: DateResolution) {
+  if (!resolution) {
+    return "keep";
+  }
+  if (resolution.kind === "nearestPast") {
+    return "nearestPast";
+  }
+  if (resolution.kind === "sequence") {
+    return "sequence";
+  }
+  return "year";
+}
+
+function getResolutionYear(resolution?: DateResolution) {
+  if (!resolution) {
+    return null;
+  }
+  if (resolution.kind === "year") {
+    return resolution.year;
+  }
+  if (resolution.kind === "sequence") {
+    return resolution.startYear;
+  }
+  return null;
 }
 
 export default App;

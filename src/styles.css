@@ -272,6 +272,69 @@ button {
   font-size: 0.92rem;
 }
 
+.column-manager {
+  margin-bottom: 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 18px;
+}
+
+.column-manager-heading {
+  margin-bottom: 10px;
+}
+
+.column-manager-copy,
+.column-manager-empty {
+  color: var(--muted);
+}
+
+.column-manager-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.column-manager-form input {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.76);
+  padding: 12px 14px;
+}
+
+.custom-column-list {
+  display: grid;
+  gap: 12px;
+}
+
+.custom-column-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.56);
+  padding: 14px 16px;
+}
+
+.custom-column-card strong,
+.custom-column-card span {
+  display: block;
+}
+
+.custom-column-card span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.column-delete-button {
+  white-space: nowrap;
+}
+
 .highlight-card ul {
   list-style: none;
   margin: 16px 0 0;
@@ -402,6 +465,39 @@ button {
   color: var(--muted);
 }
 
+.mapping-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mapping-card-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.info-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(29, 36, 51, 0.08);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.mapping-delete-button {
+  justify-self: start;
+  padding: 9px 12px;
+}
+
 .mapping-preview-grid {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
@@ -527,7 +623,7 @@ table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 960px;
+  min-width: 920px;
 }
 
 th {
@@ -633,6 +729,12 @@ td textarea {
   padding: 10px 14px;
 }
 
+.row-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 @media (max-width: 960px) {
   .hero,
   .import-grid,
@@ -646,6 +748,15 @@ td textarea {
 
   .resolution-item {
     grid-template-columns: 1fr;
+  }
+
+  .column-manager-form {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-column-card {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .app-shell {
