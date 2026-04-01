@@ -638,6 +638,24 @@ td textarea {
   min-height: 84px;
 }
 
+.status-edit-control {
+  display: grid;
+  gap: 8px;
+}
+
+.status-edit-control select {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.status-add-row {
+  display: grid;
+  gap: 8px;
+}
+
 .icon-column,
 .icon-cell {
   width: 1%;

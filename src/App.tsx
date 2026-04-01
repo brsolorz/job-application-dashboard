@@ -49,6 +49,7 @@ type PersistedDashboard = {
   records: JobRecord[];
   customColumns: CustomColumn[];
   hiddenColumns: string[];
+  statusOptions: string[];
 };
 
 type ImportSummary = {
@@ -87,6 +88,7 @@ type ImportFieldDefinition = {
 };
 
 const STORAGE_KEY = "job-dashboard-records";
+const DEFAULT_STATUS_OPTIONS = ["Applied", "Interviewing", "Take-home", "Offer", "Rejected"];
 
 const STANDARD_FIELDS: Array<{
   key: StandardFieldKey;
@@ -179,6 +181,7 @@ function App() {
   const [records, setRecords] = useState<JobRecord[]>(initialState.records);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>(initialState.customColumns);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(initialState.hiddenColumns);
+  const [statusOptions, setStatusOptions] = useState<string[]>(initialState.statusOptions);
   const [googleSheetUrl, setGoogleSheetUrl] = useState("");
   const [importMessage, setImportMessage] = useState<string>("");
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
@@ -188,15 +191,18 @@ function App() {
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [newCustomColumnName, setNewCustomColumnName] = useState("");
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
+  const [isAddingStatus, setIsAddingStatus] = useState(false);
+  const [newStatusDraft, setNewStatusDraft] = useState("");
 
   useEffect(() => {
     const payload: PersistedDashboard = {
       records,
       customColumns,
       hiddenColumns,
+      statusOptions,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [records, customColumns, hiddenColumns]);
+  }, [records, customColumns, hiddenColumns, statusOptions]);
 
   const importFields = useMemo(
     () => buildImportFields(customColumns),
@@ -570,6 +576,8 @@ function App() {
       ...record,
       customValues: { ...record.customValues },
     });
+    setIsAddingStatus(false);
+    setNewStatusDraft("");
   }
 
   function updateEditingDraft(field: StandardFieldKey, value: string) {
@@ -614,11 +622,29 @@ function App() {
     );
     setEditingRowId(null);
     setEditingDraft(null);
+    setIsAddingStatus(false);
+    setNewStatusDraft("");
   }
 
   function cancelEditingRow() {
     setEditingRowId(null);
     setEditingDraft(null);
+    setIsAddingStatus(false);
+    setNewStatusDraft("");
+  }
+
+  function addStatusOption() {
+    const nextStatus = newStatusDraft.trim();
+    if (!nextStatus) {
+      return;
+    }
+
+    setStatusOptions((current) =>
+      current.includes(nextStatus) ? current : [...current, nextStatus],
+    );
+    updateEditingDraft("status", nextStatus);
+    setNewStatusDraft("");
+    setIsAddingStatus(false);
   }
 
   function addBlankRecord() {
@@ -1125,7 +1151,46 @@ function App() {
                       </td> : null}
                       {!hiddenColumns.includes("status") ? <td>
                         {editingRowId === record.id && editingDraft ? (
-                          renderEditingInput(editingDraft.status, (value) => updateEditingDraft("status", value))
+                          <div className="status-edit-control">
+                            <select
+                              value={editingDraft.status}
+                              onChange={(event) => updateEditingDraft("status", event.target.value)}
+                            >
+                              {statusOptions.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                            {isAddingStatus ? (
+                              <div className="status-add-row">
+                                <input
+                                  value={newStatusDraft}
+                                  onChange={(event) => setNewStatusDraft(event.target.value)}
+                                  placeholder="New status"
+                                />
+                                <button className="ghost-button compact-button" onClick={addStatusOption}>
+                                  Add
+                                </button>
+                                <button
+                                  className="ghost-button compact-button"
+                                  onClick={() => {
+                                    setIsAddingStatus(false);
+                                    setNewStatusDraft("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className="ghost-button compact-button"
+                                onClick={() => setIsAddingStatus(true)}
+                              >
+                                New
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <span className={`status-pill status-${slugify(record.status)}`}>
                             {record.status || "—"}
@@ -1340,28 +1405,36 @@ function renderPrimaryCell(primary: string, secondary: string) {
 function loadInitialDashboard(): PersistedDashboard {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
-    return { records: [], customColumns: [], hiddenColumns: [] };
+    return { records: [], customColumns: [], hiddenColumns: [], statusOptions: DEFAULT_STATUS_OPTIONS };
   }
 
   try {
     const parsed = JSON.parse(stored) as PersistedDashboard | JobRecord[];
     if (Array.isArray(parsed)) {
+      const records = parsed.map((record) => normalizeLegacyRecord(record));
       return {
-        records: parsed.map((record) => normalizeLegacyRecord(record)),
+        records,
         customColumns: [],
         hiddenColumns: [],
+        statusOptions: buildStatusOptions(records, []),
       };
     }
 
+    const records = Array.isArray(parsed.records)
+      ? parsed.records.map((record) => normalizeLegacyRecord(record))
+      : [];
+    const storedStatusOptions = Array.isArray(parsed.statusOptions)
+      ? parsed.statusOptions.filter((value): value is string => typeof value === "string")
+      : [];
+
     return {
-      records: Array.isArray(parsed.records)
-        ? parsed.records.map((record) => normalizeLegacyRecord(record))
-        : [],
+      records,
       customColumns: Array.isArray(parsed.customColumns) ? parsed.customColumns : [],
       hiddenColumns: Array.isArray(parsed.hiddenColumns) ? parsed.hiddenColumns : [],
+      statusOptions: buildStatusOptions(records, storedStatusOptions),
     };
   } catch {
-    return { records: [], customColumns: [], hiddenColumns: [] };
+    return { records: [], customColumns: [], hiddenColumns: [], statusOptions: DEFAULT_STATUS_OPTIONS };
   }
 }
 
@@ -1911,6 +1984,21 @@ function slugify(value: string) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : String(value ?? "");
+}
+
+function buildStatusOptions(records: JobRecord[], storedStatusOptions: string[]) {
+  const next = new Set(DEFAULT_STATUS_OPTIONS);
+  storedStatusOptions.forEach((status) => {
+    if (status.trim()) {
+      next.add(status.trim());
+    }
+  });
+  records.forEach((record) => {
+    if (record.status.trim()) {
+      next.add(record.status.trim());
+    }
+  });
+  return Array.from(next);
 }
 
 function toCustomFieldKey(columnId: string) {
