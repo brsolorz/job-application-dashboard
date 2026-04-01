@@ -1275,18 +1275,27 @@ function App() {
                     <option value="withTask">Needs to do</option>
                     <option value="withoutTask">No to do</option>
                   </select>
-                  <input
-                    type="date"
-                    value={appliedDateFrom}
-                    onChange={(event) => setAppliedDateFrom(event.target.value)}
-                    aria-label="Applied date from"
-                  />
-                  <input
-                    type="date"
-                    value={appliedDateTo}
-                    onChange={(event) => setAppliedDateTo(event.target.value)}
-                    aria-label="Applied date to"
-                  />
+                  <div className="date-filter-group" aria-label="Applied date range">
+                    <span className="date-filter-label">Applied date</span>
+                    <label className="date-filter-field">
+                      <span>Start</span>
+                      <input
+                        type="date"
+                        value={appliedDateFrom}
+                        onChange={(event) => setAppliedDateFrom(event.target.value)}
+                        aria-label="Applied date start"
+                      />
+                    </label>
+                    <label className="date-filter-field">
+                      <span>End</span>
+                      <input
+                        type="date"
+                        value={appliedDateTo}
+                        onChange={(event) => setAppliedDateTo(event.target.value)}
+                        aria-label="Applied date end"
+                      />
+                    </label>
+                  </div>
                   {(tableSearch ||
                     statusFilter !== "all" ||
                     taskFilter !== "all" ||

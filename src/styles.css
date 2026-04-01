@@ -194,6 +194,36 @@ button {
   background: rgba(255, 255, 255, 0.78);
 }
 
+.date-filter-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.date-filter-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 10px;
+}
+
+.date-filter-field {
+  display: grid;
+  gap: 4px;
+}
+
+.date-filter-field span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.date-filter-field input {
+  min-width: 148px;
+}
+
 .table-clear-button {
   padding: 9px 12px;
   border-radius: 999px;
@@ -964,8 +994,13 @@ td textarea {
   }
 
   .table-filters > select,
-  .table-filters > button {
+  .table-filters > button,
+  .table-filters > .date-filter-group {
     flex: 1 1 160px;
+  }
+
+  .date-filter-group {
+    align-items: stretch;
   }
 
   .table-search input {
