@@ -2091,20 +2091,20 @@ function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
 
 function computeStats(records: JobRecord[]) {
   const total = records.length;
-  const interviewing = records.filter((record) =>
-    ["interviewing", "take-home", "offer"].includes(record.status.toLowerCase()),
+  const progressed = records.filter(
+    (record) => record.status.trim() && record.status.toLowerCase() !== "applied",
   ).length;
   const offers = records.filter((record) => record.status.toLowerCase().includes("offer")).length;
   const rejected = records.filter((record) => record.status.toLowerCase().includes("reject")).length;
   const openTasks = records.filter((record) => record.nextAction.trim()).length;
-  const interviewRate = total === 0 ? 0 : Math.round((interviewing / total) * 100);
+  const interviewRate = total === 0 ? 0 : Math.round((progressed / total) * 100);
 
   return {
     total,
     openTasks,
     interviewRate,
     cards: [
-      { label: "In process", value: interviewing },
+      { label: "In process", value: progressed },
       { label: "Offers", value: offers },
       { label: "Rejected", value: rejected },
       { label: "Needs follow-up", value: openTasks },
