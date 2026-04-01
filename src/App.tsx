@@ -884,11 +884,10 @@ function App() {
                   <label key={field.key} className="mapping-card">
                     <div className="mapping-card-header">
                       <span>{field.label}</span>
-                      <span className="info-badge" title={field.helpText}>
+                      <span className="info-badge" data-tooltip={field.helpText}>
                         ?
                       </span>
                     </div>
-                    <p className="mapping-card-help">{field.helpText}</p>
                     <select
                       value={pendingImport.fieldMap[field.key] ?? ""}
                       onChange={(event) => updatePendingImportField(field.key, event.target.value)}
@@ -930,6 +929,9 @@ function App() {
               <div className="mapping-preview-grid">
                 <div className="mapping-preview-card">
                   <h3>Unmatched columns</h3>
+                  <p className="mapping-preview-note">
+                    Click an unmatched column to add a new one.
+                  </p>
                   <div className="mapping-tags">
                     {pendingImportSummary.unmatchedColumns.length > 0 ? (
                       pendingImportSummary.unmatchedColumns.map((column) => (
@@ -938,7 +940,7 @@ function App() {
                           className="tag tag-button"
                           onClick={() => createCustomColumnFromHeader(column)}
                         >
-                          {column} + create column
+                          {column}
                         </button>
                       ))
                     ) : (

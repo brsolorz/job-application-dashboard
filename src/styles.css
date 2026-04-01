@@ -409,13 +409,6 @@ button {
   gap: 10px;
 }
 
-.mapping-card-help {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
 .mapping-card-actions {
   display: flex;
   gap: 10px;
@@ -423,6 +416,7 @@ button {
 }
 
 .info-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -434,6 +428,32 @@ button {
   font-size: 0.82rem;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+.info-badge::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 5;
+  width: 220px;
+  border-radius: 12px;
+  background: rgba(29, 36, 51, 0.96);
+  color: white;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  box-shadow: 0 16px 40px rgba(30, 38, 56, 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 80ms ease, transform 80ms ease;
+}
+
+.info-badge:hover::after,
+.info-badge:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .mapping-delete-button {
@@ -517,6 +537,12 @@ button {
 .mapping-preview-card h3 {
   margin: 0 0 14px;
   font-family: "Space Grotesk", sans-serif;
+}
+
+.mapping-preview-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .mapping-tags {
