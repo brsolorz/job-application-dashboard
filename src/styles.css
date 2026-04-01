@@ -651,11 +651,6 @@ td textarea {
   padding: 10px 12px;
 }
 
-.status-add-row {
-  display: grid;
-  gap: 8px;
-}
-
 .icon-column,
 .icon-cell {
   width: 1%;
@@ -814,6 +809,10 @@ td textarea {
   padding: 12px 14px;
 }
 
+.modal-form-status {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .modal-list {
   display: grid;
   gap: 12px;
@@ -846,6 +845,19 @@ td textarea {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.status-modal-row {
+  display: grid;
+  gap: 8px;
+}
+
+.status-modal-row input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 12px;
 }
 
 @media (max-width: 960px) {

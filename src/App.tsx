@@ -191,8 +191,8 @@ function App() {
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [newCustomColumnName, setNewCustomColumnName] = useState("");
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
-  const [isAddingStatus, setIsAddingStatus] = useState(false);
   const [newStatusDraft, setNewStatusDraft] = useState("");
+  const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const payload: PersistedDashboard = {
@@ -576,8 +576,6 @@ function App() {
       ...record,
       customValues: { ...record.customValues },
     });
-    setIsAddingStatus(false);
-    setNewStatusDraft("");
   }
 
   function updateEditingDraft(field: StandardFieldKey, value: string) {
@@ -622,15 +620,11 @@ function App() {
     );
     setEditingRowId(null);
     setEditingDraft(null);
-    setIsAddingStatus(false);
-    setNewStatusDraft("");
   }
 
   function cancelEditingRow() {
     setEditingRowId(null);
     setEditingDraft(null);
-    setIsAddingStatus(false);
-    setNewStatusDraft("");
   }
 
   function addStatusOption() {
@@ -642,9 +636,74 @@ function App() {
     setStatusOptions((current) =>
       current.includes(nextStatus) ? current : [...current, nextStatus],
     );
-    updateEditingDraft("status", nextStatus);
     setNewStatusDraft("");
-    setIsAddingStatus(false);
+  }
+
+  function updateStatusDraft(status: string, value: string) {
+    setStatusDrafts((current) => ({
+      ...current,
+      [status]: value,
+    }));
+  }
+
+  function renameStatusOption(previousStatus: string) {
+    const nextStatus = (statusDrafts[previousStatus] ?? "").trim();
+    if (!nextStatus || nextStatus === previousStatus) {
+      return;
+    }
+
+    setStatusOptions((current) =>
+      current.map((status) => (status === previousStatus ? nextStatus : status)),
+    );
+    setRecords((current) =>
+      current.map((record) =>
+        record.status === previousStatus
+          ? {
+              ...record,
+              status: nextStatus,
+            }
+          : record,
+      ),
+    );
+    setEditingDraft((current) =>
+      current && current.status === previousStatus
+        ? {
+            ...current,
+            status: nextStatus,
+          }
+        : current,
+    );
+    setStatusDrafts((current) => ({
+      ...current,
+      [previousStatus]: nextStatus,
+    }));
+  }
+
+  function removeStatusOption(statusToRemove: string) {
+    setStatusOptions((current) => current.filter((status) => status !== statusToRemove));
+    setRecords((current) =>
+      current.map((record) =>
+        record.status === statusToRemove
+          ? {
+              ...record,
+              status: DEFAULT_STATUS_OPTIONS[0],
+            }
+          : record,
+      ),
+    );
+    setEditingDraft((current) =>
+      current && current.status === statusToRemove
+        ? {
+            ...current,
+            status: DEFAULT_STATUS_OPTIONS[0],
+          }
+        : current,
+    );
+    setStatusDrafts((current) => {
+      const nextDrafts = { ...current };
+      delete nextDrafts[statusToRemove];
+      return nextDrafts;
+    });
   }
 
   function addBlankRecord() {
@@ -1162,34 +1221,6 @@ function App() {
                                 </option>
                               ))}
                             </select>
-                            {isAddingStatus ? (
-                              <div className="status-add-row">
-                                <input
-                                  value={newStatusDraft}
-                                  onChange={(event) => setNewStatusDraft(event.target.value)}
-                                  placeholder="New status"
-                                />
-                                <button className="ghost-button compact-button" onClick={addStatusOption}>
-                                  Add
-                                </button>
-                                <button
-                                  className="ghost-button compact-button"
-                                  onClick={() => {
-                                    setIsAddingStatus(false);
-                                    setNewStatusDraft("");
-                                  }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                className="ghost-button compact-button"
-                                onClick={() => setIsAddingStatus(true)}
-                              >
-                                New
-                              </button>
-                            )}
                           </div>
                         ) : (
                           <span className={`status-pill status-${slugify(record.status)}`}>
@@ -1360,6 +1391,49 @@ function App() {
                 ) : (
                   <p className="modal-empty">No custom columns yet.</p>
                 )}
+              </div>
+            </div>
+
+            <div className="modal-section">
+              <h3>Statuses</h3>
+              <div className="modal-form modal-form-status">
+                <input
+                  value={newStatusDraft}
+                  onChange={(event) => setNewStatusDraft(event.target.value)}
+                  placeholder="New status name"
+                />
+                <button className="primary-button" onClick={addStatusOption}>
+                  Add status
+                </button>
+              </div>
+              <div className="modal-list">
+                {statusOptions.map((status) => (
+                  <div key={status} className="modal-row">
+                    <div className="status-modal-row">
+                      <strong>{status}</strong>
+                      <input
+                        value={statusDrafts[status] ?? status}
+                        onChange={(event) => updateStatusDraft(status, event.target.value)}
+                        placeholder="Rename status"
+                      />
+                    </div>
+                    <div className="modal-actions">
+                      <button
+                        className="ghost-button"
+                        onClick={() => renameStatusOption(status)}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="danger-button"
+                        onClick={() => removeStatusOption(status)}
+                        disabled={statusOptions.length <= 1}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
