@@ -860,6 +860,19 @@ td textarea {
   padding: 10px 12px;
 }
 
+.status-usage-block {
+  display: grid;
+  gap: 8px;
+}
+
+.status-usage-block select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 12px;
+}
+
 @media (max-width: 960px) {
   .hero,
   .import-grid,

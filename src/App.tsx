@@ -193,6 +193,7 @@ function App() {
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
   const [newStatusDraft, setNewStatusDraft] = useState("");
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
+  const [statusReplacementDrafts, setStatusReplacementDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const payload: PersistedDashboard = {
@@ -680,13 +681,22 @@ function App() {
   }
 
   function removeStatusOption(statusToRemove: string) {
+    const replacementStatus = statusReplacementDrafts[statusToRemove]?.trim();
+    const inUseCount = records.filter((record) => record.status === statusToRemove).length;
+
+    if (inUseCount > 0) {
+      if (!replacementStatus || replacementStatus === statusToRemove) {
+        return;
+      }
+    }
+
     setStatusOptions((current) => current.filter((status) => status !== statusToRemove));
     setRecords((current) =>
       current.map((record) =>
         record.status === statusToRemove
           ? {
               ...record,
-              status: DEFAULT_STATUS_OPTIONS[0],
+              status: replacementStatus || DEFAULT_STATUS_OPTIONS[0],
             }
           : record,
       ),
@@ -695,7 +705,7 @@ function App() {
       current && current.status === statusToRemove
         ? {
             ...current,
-            status: DEFAULT_STATUS_OPTIONS[0],
+            status: replacementStatus || DEFAULT_STATUS_OPTIONS[0],
           }
         : current,
     );
@@ -704,6 +714,18 @@ function App() {
       delete nextDrafts[statusToRemove];
       return nextDrafts;
     });
+    setStatusReplacementDrafts((current) => {
+      const nextDrafts = { ...current };
+      delete nextDrafts[statusToRemove];
+      return nextDrafts;
+    });
+  }
+
+  function updateStatusReplacementDraft(status: string, value: string) {
+    setStatusReplacementDrafts((current) => ({
+      ...current,
+      [status]: value,
+    }));
   }
 
   function addBlankRecord() {
@@ -1407,33 +1429,61 @@ function App() {
                 </button>
               </div>
               <div className="modal-list">
-                {statusOptions.map((status) => (
-                  <div key={status} className="modal-row">
-                    <div className="status-modal-row">
-                      <strong>{status}</strong>
-                      <input
-                        value={statusDrafts[status] ?? status}
-                        onChange={(event) => updateStatusDraft(status, event.target.value)}
-                        placeholder="Rename status"
-                      />
+                {statusOptions.map((status) => {
+                  const inUseCount = records.filter((record) => record.status === status).length;
+                  const replacementOptions = statusOptions.filter((option) => option !== status);
+
+                  return (
+                    <div key={status} className="modal-row">
+                      <div className="status-modal-row">
+                        <strong>{status}</strong>
+                        <input
+                          value={statusDrafts[status] ?? status}
+                          onChange={(event) => updateStatusDraft(status, event.target.value)}
+                          placeholder="Rename status"
+                        />
+                        {inUseCount > 0 ? (
+                          <div className="status-usage-block">
+                            <span>
+                              Used by {inUseCount} row{inUseCount === 1 ? "" : "s"}.
+                            </span>
+                            <select
+                              value={statusReplacementDrafts[status] ?? ""}
+                              onChange={(event) =>
+                                updateStatusReplacementDraft(status, event.target.value)
+                              }
+                            >
+                              <option value="">Choose replacement status</option>
+                              {replacementOptions.map((option) => (
+                                <option key={`${status}-${option}`} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          className="ghost-button"
+                          onClick={() => renameStatusOption(status)}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="danger-button"
+                          onClick={() => removeStatusOption(status)}
+                          disabled={
+                            statusOptions.length <= 1 ||
+                            (inUseCount > 0 && !statusReplacementDrafts[status])
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <div className="modal-actions">
-                      <button
-                        className="ghost-button"
-                        onClick={() => renameStatusOption(status)}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        className="danger-button"
-                        onClick={() => removeStatusOption(status)}
-                        disabled={statusOptions.length <= 1}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
