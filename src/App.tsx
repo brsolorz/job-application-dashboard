@@ -1259,7 +1259,7 @@ function App() {
                     <option value="withoutTask">No to do</option>
                   </select>
                   {(tableSearch || statusFilter !== "all" || taskFilter !== "all") ? (
-                    <button className="ghost-button" onClick={resetTableFilters}>
+                    <button className="ghost-button table-clear-button" onClick={resetTableFilters}>
                       Clear filters
                     </button>
                   ) : null}
