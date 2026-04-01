@@ -185,6 +185,9 @@ function App() {
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<JobRecord | null>(null);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [newCustomColumnName, setNewCustomColumnName] = useState("");
+  const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
 
   useEffect(() => {
     const payload: PersistedDashboard = {
@@ -205,6 +208,13 @@ function App() {
         .filter((column) => !hiddenColumns.includes(toCustomFieldKey(column.id)))
         .slice(0, TABLE_CUSTOM_COLUMN_LIMIT),
     [customColumns, hiddenColumns],
+  );
+  const configurableStandardFields = useMemo(
+    () =>
+      STANDARD_FIELDS.filter((field) =>
+        ["company", "role", "status", "appliedDate", "nextAction", "notes"].includes(field.key),
+      ),
+    [],
   );
 
   const stats = useMemo(() => computeStats(records), [records]);
@@ -495,6 +505,12 @@ function App() {
         },
       };
     });
+  }
+
+  function addCustomColumnFromModal() {
+    addCustomColumn(newCustomColumnName, newCustomColumnHelpText);
+    setNewCustomColumnName("");
+    setNewCustomColumnHelpText("");
   }
 
   function removeCustomColumn(columnId: string) {
@@ -1051,39 +1067,9 @@ function App() {
               <p className="eyebrow">Applications</p>
               <h2>Edit every record inline</h2>
             </div>
-          </div>
-
-          <div className="table-column-controls">
-            {STANDARD_FIELDS.filter((field) =>
-              ["company", "role", "status", "appliedDate", "nextAction", "notes"].includes(field.key),
-            ).map((field) => (
-              <button
-                key={field.key}
-                className={`tag tag-button ${hiddenColumns.includes(field.key) ? "tag-muted" : ""}`}
-                onClick={() => toggleColumnVisibility(field.key)}
-              >
-                {hiddenColumns.includes(field.key) ? `Show ${field.label}` : `Hide ${field.label}`}
-              </button>
-            ))}
-            {customColumns.map((column) => {
-              const fieldKey = toCustomFieldKey(column.id);
-              return (
-                <div key={column.id} className="table-column-control-group">
-                  <button
-                    className={`tag tag-button ${hiddenColumns.includes(fieldKey) ? "tag-muted" : ""}`}
-                    onClick={() => toggleColumnVisibility(fieldKey)}
-                  >
-                    {hiddenColumns.includes(fieldKey) ? `Show ${column.label}` : `Hide ${column.label}`}
-                  </button>
-                  <button
-                    className="tag tag-button tag-danger"
-                    onClick={() => removeCustomColumn(column.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              );
-            })}
+            <button className="ghost-button" onClick={() => setIsColumnModalOpen(true)}>
+              Edit columns
+            </button>
           </div>
 
           {records.length === 0 ? (
@@ -1230,6 +1216,92 @@ function App() {
           )}
         </section>
       </main>
+
+      {isColumnModalOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsColumnModalOpen(false)}>
+          <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="section-heading modal-heading">
+              <div>
+                <p className="eyebrow">Columns</p>
+                <h2>Edit columns</h2>
+              </div>
+              <button className="ghost-button" onClick={() => setIsColumnModalOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="modal-section">
+              <h3>Default columns</h3>
+              <div className="modal-list">
+                {configurableStandardFields.map((field) => (
+                  <div key={field.key} className="modal-row">
+                    <div>
+                      <strong>{field.label}</strong>
+                      <span>{field.helpText}</span>
+                    </div>
+                    <button
+                      className="ghost-button"
+                      onClick={() => toggleColumnVisibility(field.key)}
+                    >
+                      {hiddenColumns.includes(field.key) ? "Show" : "Hide"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="modal-section">
+              <h3>Custom columns</h3>
+              <div className="modal-form">
+                <input
+                  value={newCustomColumnName}
+                  onChange={(event) => setNewCustomColumnName(event.target.value)}
+                  placeholder="Column name"
+                />
+                <input
+                  value={newCustomColumnHelpText}
+                  onChange={(event) => setNewCustomColumnHelpText(event.target.value)}
+                  placeholder="What this column means"
+                />
+                <button className="primary-button" onClick={addCustomColumnFromModal}>
+                  Add custom column
+                </button>
+              </div>
+              <div className="modal-list">
+                {customColumns.length > 0 ? (
+                  customColumns.map((column) => {
+                    const fieldKey = toCustomFieldKey(column.id);
+                    return (
+                      <div key={column.id} className="modal-row">
+                        <div>
+                          <strong>{column.label}</strong>
+                          <span>{column.helpText}</span>
+                        </div>
+                        <div className="modal-actions">
+                          <button
+                            className="ghost-button"
+                            onClick={() => toggleColumnVisibility(fieldKey)}
+                          >
+                            {hiddenColumns.includes(fieldKey) ? "Show" : "Hide"}
+                          </button>
+                          <button
+                            className="danger-button"
+                            onClick={() => removeCustomColumn(column.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="modal-empty">No custom columns yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

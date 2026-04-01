@@ -718,16 +718,87 @@ td textarea {
   line-height: 1.4;
 }
 
-.table-column-controls {
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(20, 24, 32, 0.44);
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-panel {
+  width: min(760px, 100%);
+  max-height: min(85vh, 920px);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 28px;
+  background: rgba(255, 250, 244, 0.96);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.modal-heading {
+  margin-bottom: 18px;
+}
+
+.modal-section + .modal-section {
+  margin-top: 24px;
+}
+
+.modal-section h3 {
+  margin: 0 0 12px;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.modal-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
-.table-column-control-group {
+.modal-form input {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+}
+
+.modal-list {
+  display: grid;
+  gap: 12px;
+}
+
+.modal-row {
   display: flex;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 14px 16px;
+}
+
+.modal-row strong,
+.modal-row span {
+  display: block;
+}
+
+.modal-row span,
+.modal-empty {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -744,6 +815,15 @@ td textarea {
 
   .resolution-item {
     grid-template-columns: 1fr;
+  }
+
+  .modal-form {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .app-shell {
