@@ -638,6 +638,12 @@ td textarea {
   min-height: 84px;
 }
 
+.icon-column,
+.icon-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
 .table-row {
   transition: background 140ms ease;
 }
@@ -712,10 +718,32 @@ td textarea {
   padding: 10px 14px;
 }
 
-.row-meta {
-  color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.4;
+.compact-button {
+  min-width: 86px;
+}
+
+.icon-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  box-shadow: 0 8px 18px rgba(30, 38, 56, 0.08);
+}
+
+.icon-button span {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .modal-backdrop {

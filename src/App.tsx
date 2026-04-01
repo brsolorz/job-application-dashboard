@@ -1099,8 +1099,8 @@ function App() {
                     {visibleCustomColumns.map((column) => (
                       <th key={column.id}>{column.label}</th>
                     ))}
-                    <th>Actions</th>
                     {!hiddenColumns.includes("notes") ? <th>Notes</th> : null}
+                    <th className="icon-column" />
                   </tr>
                 </thead>
                 <tbody>
@@ -1175,29 +1175,6 @@ function App() {
                           )}
                         </td>
                       ))}
-                      <td>
-                        {editingRowId === record.id ? (
-                          <div className="row-actions">
-                            <button className="ghost-button row-button" onClick={cancelEditingRow}>
-                              Cancel
-                            </button>
-                            <button className="primary-button row-button" onClick={saveEditingRow}>
-                              Save
-                            </button>
-                            <span className="row-meta">Updated on save</span>
-                          </div>
-                        ) : (
-                          <div className="row-actions">
-                            <button
-                              className="ghost-button row-button"
-                              onClick={() => startEditing(record)}
-                            >
-                              Edit
-                            </button>
-                            <span className="row-meta">Updated {record.lastUpdated || "—"}</span>
-                          </div>
-                        )}
-                      </td>
                       {!hiddenColumns.includes("notes") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           renderEditingTextarea(
@@ -1208,6 +1185,27 @@ function App() {
                           <span className="cell-text cell-notes">{record.notes || "—"}</span>
                         )}
                       </td> : null}
+                      <td className="icon-cell">
+                        {editingRowId === record.id ? (
+                          <div className="icon-actions">
+                            <button className="ghost-button row-button compact-button" onClick={cancelEditingRow}>
+                              Cancel
+                            </button>
+                            <button className="primary-button row-button compact-button" onClick={saveEditingRow}>
+                              Save
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="icon-button"
+                            onClick={() => startEditing(record)}
+                            aria-label={`Edit ${record.company || record.role || "application"}`}
+                            title="Edit row"
+                          >
+                            <span aria-hidden="true">✎</span>
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
