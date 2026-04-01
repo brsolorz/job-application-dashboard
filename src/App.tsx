@@ -48,6 +48,7 @@ type CustomColumn = {
 type PersistedDashboard = {
   records: JobRecord[];
   customColumns: CustomColumn[];
+  hiddenColumns: string[];
 };
 
 type ImportSummary = {
@@ -177,8 +178,7 @@ function App() {
   const initialState = useMemo(() => loadInitialDashboard(), []);
   const [records, setRecords] = useState<JobRecord[]>(initialState.records);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>(initialState.customColumns);
-  const [newColumnLabel, setNewColumnLabel] = useState("");
-  const [newColumnHelpText, setNewColumnHelpText] = useState("");
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(initialState.hiddenColumns);
   const [googleSheetUrl, setGoogleSheetUrl] = useState("");
   const [importMessage, setImportMessage] = useState<string>("");
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
@@ -190,17 +190,21 @@ function App() {
     const payload: PersistedDashboard = {
       records,
       customColumns,
+      hiddenColumns,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [records, customColumns]);
+  }, [records, customColumns, hiddenColumns]);
 
   const importFields = useMemo(
     () => buildImportFields(customColumns),
     [customColumns],
   );
   const visibleCustomColumns = useMemo(
-    () => customColumns.slice(0, TABLE_CUSTOM_COLUMN_LIMIT),
-    [customColumns],
+    () =>
+      customColumns
+        .filter((column) => !hiddenColumns.includes(toCustomFieldKey(column.id)))
+        .slice(0, TABLE_CUSTOM_COLUMN_LIMIT),
+    [customColumns, hiddenColumns],
   );
 
   const stats = useMemo(() => computeStats(records), [records]);
@@ -463,26 +467,26 @@ function App() {
     });
   }
 
-  function addCustomColumn() {
-    const label = newColumnLabel.trim();
+  function addCustomColumn(columnLabel: string, helpText?: string, mappedHeader?: string) {
+    const label = columnLabel.trim();
     if (!label) {
       return;
     }
-
     const nextColumn: CustomColumn = {
       id: crypto.randomUUID(),
       label,
-      helpText: newColumnHelpText.trim() || `Custom field for ${label}.`,
+      helpText: helpText?.trim() || `Custom field for ${label}.`,
     };
 
     setCustomColumns((current) => [...current, nextColumn]);
+    setHiddenColumns((current) => current.filter((column) => column !== toCustomFieldKey(nextColumn.id)));
     setPendingImport((current) => {
       if (!current) {
         return current;
       }
 
       const key = toCustomFieldKey(nextColumn.id);
-      const guessedHeader = guessHeaderForCustomField(current.headers, nextColumn);
+      const guessedHeader = mappedHeader ?? guessHeaderForCustomField(current.headers, nextColumn);
       return {
         ...current,
         fieldMap: {
@@ -491,12 +495,11 @@ function App() {
         },
       };
     });
-    setNewColumnLabel("");
-    setNewColumnHelpText("");
   }
 
   function removeCustomColumn(columnId: string) {
     setCustomColumns((current) => current.filter((column) => column.id !== columnId));
+    setHiddenColumns((current) => current.filter((column) => column !== toCustomFieldKey(columnId)));
     setRecords((current) =>
       current.map((record) => {
         const nextCustomValues = { ...record.customValues };
@@ -531,6 +534,18 @@ function App() {
         customValues: nextCustomValues,
       };
     });
+  }
+
+  function createCustomColumnFromHeader(header: string) {
+    addCustomColumn(header, `Imported from unmatched column "${header}".`, header);
+  }
+
+  function toggleColumnVisibility(fieldKey: FieldKey) {
+    setHiddenColumns((current) =>
+      current.includes(fieldKey)
+        ? current.filter((key) => key !== fieldKey)
+        : [...current, fieldKey],
+    );
   }
 
   function startEditing(record: JobRecord) {
@@ -691,56 +706,6 @@ function App() {
               <span>Wipes the current dashboard and custom columns so you can start over.</span>
             </div>
           ) : null}
-
-          <div className="column-manager">
-            <div className="section-heading column-manager-heading">
-              <div>
-                <p className="eyebrow">Columns</p>
-                <h2>Manage custom columns</h2>
-              </div>
-            </div>
-            <p className="column-manager-copy">
-              Add custom columns for fields you care about, map them during import, and keep
-              them visible in the dashboard after import.
-            </p>
-            <div className="column-manager-form">
-              <input
-                value={newColumnLabel}
-                onChange={(event) => setNewColumnLabel(event.target.value)}
-                placeholder="Column name"
-              />
-              <input
-                value={newColumnHelpText}
-                onChange={(event) => setNewColumnHelpText(event.target.value)}
-                placeholder="What this column means"
-              />
-              <button className="primary-button" onClick={addCustomColumn}>
-                Add column
-              </button>
-            </div>
-            <div className="custom-column-list">
-              {customColumns.length > 0 ? (
-                customColumns.map((column) => (
-                  <div key={column.id} className="custom-column-card">
-                    <div>
-                      <strong>{column.label}</strong>
-                      <span>{column.helpText}</span>
-                    </div>
-                    <button
-                      className="ghost-button column-delete-button"
-                      onClick={() => removeCustomColumn(column.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="column-manager-empty">
-                  No custom columns yet. Add one if your sheet tracks more than the default fields.
-                </p>
-              )}
-            </div>
-          </div>
 
           <div className="import-grid">
             <label className="upload-card">
@@ -936,13 +901,28 @@ function App() {
                       ))}
                     </select>
                     {field.isCustom ? (
+                      <div className="mapping-card-actions">
+                        <button
+                          className="ghost-button mapping-delete-button"
+                          onClick={() => removeCustomColumn(stripCustomPrefix(field.key))}
+                        >
+                          Delete custom column
+                        </button>
+                        <button
+                          className="ghost-button mapping-delete-button"
+                          onClick={() => toggleColumnVisibility(field.key)}
+                        >
+                          {hiddenColumns.includes(field.key) ? "Show column" : "Hide column"}
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         className="ghost-button mapping-delete-button"
-                        onClick={() => removeCustomColumn(stripCustomPrefix(field.key))}
+                        onClick={() => toggleColumnVisibility(field.key)}
                       >
-                        Delete custom column
+                        {hiddenColumns.includes(field.key) ? "Show column" : "Hide column"}
                       </button>
-                    ) : null}
+                    )}
                   </label>
                 ))}
               </div>
@@ -953,9 +933,13 @@ function App() {
                   <div className="mapping-tags">
                     {pendingImportSummary.unmatchedColumns.length > 0 ? (
                       pendingImportSummary.unmatchedColumns.map((column) => (
-                        <span key={column} className="tag">
-                          {column}
-                        </span>
+                        <button
+                          key={column}
+                          className="tag tag-button"
+                          onClick={() => createCustomColumnFromHeader(column)}
+                        >
+                          {column} + create column
+                        </button>
                       ))
                     ) : (
                       <span className="tag tag-success">All detected headers are mapped</span>
@@ -1067,6 +1051,39 @@ function App() {
             </div>
           </div>
 
+          <div className="table-column-controls">
+            {STANDARD_FIELDS.filter((field) =>
+              ["company", "role", "status", "appliedDate", "nextAction", "notes"].includes(field.key),
+            ).map((field) => (
+              <button
+                key={field.key}
+                className={`tag tag-button ${hiddenColumns.includes(field.key) ? "tag-muted" : ""}`}
+                onClick={() => toggleColumnVisibility(field.key)}
+              >
+                {hiddenColumns.includes(field.key) ? `Show ${field.label}` : `Hide ${field.label}`}
+              </button>
+            ))}
+            {customColumns.map((column) => {
+              const fieldKey = toCustomFieldKey(column.id);
+              return (
+                <div key={column.id} className="table-column-control-group">
+                  <button
+                    className={`tag tag-button ${hiddenColumns.includes(fieldKey) ? "tag-muted" : ""}`}
+                    onClick={() => toggleColumnVisibility(fieldKey)}
+                  >
+                    {hiddenColumns.includes(fieldKey) ? `Show ${column.label}` : `Hide ${column.label}`}
+                  </button>
+                  <button
+                    className="tag tag-button tag-danger"
+                    onClick={() => removeCustomColumn(column.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
           {records.length === 0 ? (
             <div className="empty-state">
               <p className="eyebrow">Start Here</p>
@@ -1086,16 +1103,16 @@ function App() {
               <table>
                 <thead>
                   <tr>
-                    <th>Company</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Applied</th>
-                    <th>To do</th>
+                    {!hiddenColumns.includes("company") ? <th>Company</th> : null}
+                    {!hiddenColumns.includes("role") ? <th>Role</th> : null}
+                    {!hiddenColumns.includes("status") ? <th>Status</th> : null}
+                    {!hiddenColumns.includes("appliedDate") ? <th>Applied</th> : null}
+                    {!hiddenColumns.includes("nextAction") ? <th>To do</th> : null}
                     {visibleCustomColumns.map((column) => (
                       <th key={column.id}>{column.label}</th>
                     ))}
                     <th>Actions</th>
-                    <th>Notes</th>
+                    {!hiddenColumns.includes("notes") ? <th>Notes</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1104,21 +1121,21 @@ function App() {
                       key={record.id}
                       className={editingRowId === record.id ? "table-row-editing" : "table-row"}
                     >
-                      <td>
+                      {!hiddenColumns.includes("company") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           renderEditingInput(editingDraft.company, (value) => updateEditingDraft("company", value))
                         ) : (
                           renderPrimaryCell(record.company, record.location)
                         )}
-                      </td>
-                      <td>
+                      </td> : null}
+                      {!hiddenColumns.includes("role") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           renderEditingInput(editingDraft.role, (value) => updateEditingDraft("role", value))
                         ) : (
                           renderPrimaryCell(record.role, record.source)
                         )}
-                      </td>
-                      <td>
+                      </td> : null}
+                      {!hiddenColumns.includes("status") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           renderEditingInput(editingDraft.status, (value) => updateEditingDraft("status", value))
                         ) : (
@@ -1126,8 +1143,8 @@ function App() {
                             {record.status || "—"}
                           </span>
                         )}
-                      </td>
-                      <td>
+                      </td> : null}
+                      {!hiddenColumns.includes("appliedDate") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           renderEditingInput(
                             editingDraft.appliedDate,
@@ -1137,8 +1154,8 @@ function App() {
                         ) : (
                           <span className="cell-text">{record.appliedDate || "—"}</span>
                         )}
-                      </td>
-                      <td>
+                      </td> : null}
+                      {!hiddenColumns.includes("nextAction") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           <div className="stacked-edit-fields">
                             {renderEditingInput(
@@ -1157,7 +1174,7 @@ function App() {
                             record.nextActionDue ? `Due ${record.nextActionDue}` : "No due date",
                           )
                         )}
-                      </td>
+                      </td> : null}
                       {visibleCustomColumns.map((column) => (
                         <td key={`${record.id}-${column.id}`}>
                           {editingRowId === record.id && editingDraft ? (
@@ -1193,7 +1210,7 @@ function App() {
                           </div>
                         )}
                       </td>
-                      <td>
+                      {!hiddenColumns.includes("notes") ? <td>
                         {editingRowId === record.id && editingDraft ? (
                           renderEditingTextarea(
                             editingDraft.notes,
@@ -1202,7 +1219,7 @@ function App() {
                         ) : (
                           <span className="cell-text cell-notes">{record.notes || "—"}</span>
                         )}
-                      </td>
+                      </td> : null}
                     </tr>
                   ))}
                 </tbody>
@@ -1251,7 +1268,7 @@ function renderPrimaryCell(primary: string, secondary: string) {
 function loadInitialDashboard(): PersistedDashboard {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
-    return { records: [], customColumns: [] };
+    return { records: [], customColumns: [], hiddenColumns: [] };
   }
 
   try {
@@ -1260,6 +1277,7 @@ function loadInitialDashboard(): PersistedDashboard {
       return {
         records: parsed.map((record) => normalizeLegacyRecord(record)),
         customColumns: [],
+        hiddenColumns: [],
       };
     }
 
@@ -1268,9 +1286,10 @@ function loadInitialDashboard(): PersistedDashboard {
         ? parsed.records.map((record) => normalizeLegacyRecord(record))
         : [],
       customColumns: Array.isArray(parsed.customColumns) ? parsed.customColumns : [],
+      hiddenColumns: Array.isArray(parsed.hiddenColumns) ? parsed.hiddenColumns : [],
     };
   } catch {
-    return { records: [], customColumns: [] };
+    return { records: [], customColumns: [], hiddenColumns: [] };
   }
 }
 
