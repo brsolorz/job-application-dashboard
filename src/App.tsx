@@ -192,6 +192,8 @@ function App() {
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [taskFilter, setTaskFilter] = useState("all");
+  const [appliedDateFrom, setAppliedDateFrom] = useState("");
+  const [appliedDateTo, setAppliedDateTo] = useState("");
   const [newCustomColumnName, setNewCustomColumnName] = useState("");
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
   const [pendingColumnDeletionId, setPendingColumnDeletionId] = useState<string | null>(null);
@@ -251,10 +253,23 @@ function App() {
             : taskFilter === "withTask"
               ? Boolean(record.nextAction.trim())
               : !record.nextAction.trim();
+        const comparableAppliedDate = toComparableDate(record.appliedDate);
+        const matchesAppliedDateFrom = !appliedDateFrom
+          ? true
+          : comparableAppliedDate !== null && comparableAppliedDate >= appliedDateFrom;
+        const matchesAppliedDateTo = !appliedDateTo
+          ? true
+          : comparableAppliedDate !== null && comparableAppliedDate <= appliedDateTo;
 
-        return matchesSearch && matchesStatus && matchesTask;
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesTask &&
+          matchesAppliedDateFrom &&
+          matchesAppliedDateTo
+        );
       }),
-    [records, statusFilter, tableSearch, taskFilter],
+    [appliedDateFrom, appliedDateTo, records, statusFilter, tableSearch, taskFilter],
   );
 
   async function handleGoogleSheetImport() {
@@ -666,6 +681,8 @@ function App() {
     setTableSearch("");
     setStatusFilter("all");
     setTaskFilter("all");
+    setAppliedDateFrom("");
+    setAppliedDateTo("");
   }
 
   function addStatusOption() {
@@ -1258,7 +1275,23 @@ function App() {
                     <option value="withTask">Needs to do</option>
                     <option value="withoutTask">No to do</option>
                   </select>
-                  {(tableSearch || statusFilter !== "all" || taskFilter !== "all") ? (
+                  <input
+                    type="date"
+                    value={appliedDateFrom}
+                    onChange={(event) => setAppliedDateFrom(event.target.value)}
+                    aria-label="Applied date from"
+                  />
+                  <input
+                    type="date"
+                    value={appliedDateTo}
+                    onChange={(event) => setAppliedDateTo(event.target.value)}
+                    aria-label="Applied date to"
+                  />
+                  {(tableSearch ||
+                    statusFilter !== "all" ||
+                    taskFilter !== "all" ||
+                    appliedDateFrom ||
+                    appliedDateTo) ? (
                     <button className="ghost-button table-clear-button" onClick={resetTableFilters}>
                       Clear filters
                     </button>
@@ -2168,6 +2201,29 @@ function buildSearchText(record: JobRecord) {
   ]
     .join(" ")
     .toLowerCase();
+}
+
+function toComparableDate(value: string) {
+  const raw = value.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const slashMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
+  if (slashMatch) {
+    const month = slashMatch[1].padStart(2, "0");
+    const day = slashMatch[2].padStart(2, "0");
+    const yearPart = slashMatch[3];
+    const year = yearPart.length === 2 ? `20${yearPart}` : yearPart;
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
 }
 
 function mergeRecords(current: JobRecord[], imported: JobRecord[]) {
