@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type StandardFieldKey =
   | "company"
@@ -16,6 +16,7 @@ type StandardFieldKey =
 
 type DateFieldKey = "appliedDate" | "nextActionDue" | "lastUpdated";
 type FieldKey = StandardFieldKey | `custom:${string}`;
+type TableFilterPanel = "status" | "task" | "appliedDate" | null;
 
 type DateResolution =
   | { kind: "year"; year: string }
@@ -194,12 +195,14 @@ function App() {
   const [taskFilter, setTaskFilter] = useState("all");
   const [appliedDateFrom, setAppliedDateFrom] = useState("");
   const [appliedDateTo, setAppliedDateTo] = useState("");
+  const [openFilterPanel, setOpenFilterPanel] = useState<TableFilterPanel>(null);
   const [newCustomColumnName, setNewCustomColumnName] = useState("");
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
   const [pendingColumnDeletionId, setPendingColumnDeletionId] = useState<string | null>(null);
   const [newStatusDraft, setNewStatusDraft] = useState("");
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
   const [statusReplacementDrafts, setStatusReplacementDrafts] = useState<Record<string, string>>({});
+  const tableFilterRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const payload: PersistedDashboard = {
@@ -210,6 +213,17 @@ function App() {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   }, [records, customColumns, hiddenColumns, statusOptions]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!tableFilterRef.current?.contains(event.target as Node)) {
+        setOpenFilterPanel(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
 
   const importFields = useMemo(
     () => buildImportFields(customColumns),
@@ -683,6 +697,11 @@ function App() {
     setTaskFilter("all");
     setAppliedDateFrom("");
     setAppliedDateTo("");
+    setOpenFilterPanel(null);
+  }
+
+  function toggleFilterPanel(panel: Exclude<TableFilterPanel, null>) {
+    setOpenFilterPanel((current) => (current === panel ? null : panel));
   }
 
   function addStatusOption() {
@@ -1261,41 +1280,102 @@ function App() {
                     placeholder="Search company, role, notes, to do..."
                   />
                 </div>
-                <div className="table-filters">
-                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                    <option value="all">All statuses</option>
-                    {statusOptions.map((status) => (
-                      <option key={`filter-${status}`} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                  <select value={taskFilter} onChange={(event) => setTaskFilter(event.target.value)}>
-                    <option value="all">All tasks</option>
-                    <option value="withTask">Needs to do</option>
-                    <option value="withoutTask">No to do</option>
-                  </select>
-                  <div className="date-filter-group" aria-label="Applied date range">
-                    <span className="date-filter-label">Applied date</span>
-                    <label className="date-filter-field">
-                      <span>Start</span>
-                      <input
-                        type="date"
-                        value={appliedDateFrom}
-                        onChange={(event) => setAppliedDateFrom(event.target.value)}
-                        aria-label="Applied date start"
-                      />
-                    </label>
-                    <label className="date-filter-field">
-                      <span>End</span>
-                      <input
-                        type="date"
-                        value={appliedDateTo}
-                        onChange={(event) => setAppliedDateTo(event.target.value)}
-                        aria-label="Applied date end"
-                      />
-                    </label>
+                <div className="table-filters" ref={tableFilterRef}>
+                  <div className="filter-pill-group">
+                    <button
+                      className={`filter-pill ${openFilterPanel === "status" ? "filter-pill-open" : ""}`}
+                      onClick={() => toggleFilterPanel("status")}
+                      type="button"
+                    >
+                      <span className="filter-pill-name">Status</span>
+                      <span className="filter-pill-value">{statusFilterLabel(statusFilter)}</span>
+                      <span className="filter-pill-caret" aria-hidden="true">▾</span>
+                    </button>
+                    {openFilterPanel === "status" ? (
+                      <div className="filter-panel">
+                        <label className="filter-panel-field">
+                          <span>Status</span>
+                          <select
+                            value={statusFilter}
+                            onChange={(event) => setStatusFilter(event.target.value)}
+                          >
+                            <option value="all">All statuses</option>
+                            {statusOptions.map((status) => (
+                              <option key={`filter-${status}`} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    ) : null}
                   </div>
+
+                  <div className="filter-pill-group">
+                    <button
+                      className={`filter-pill ${openFilterPanel === "task" ? "filter-pill-open" : ""}`}
+                      onClick={() => toggleFilterPanel("task")}
+                      type="button"
+                    >
+                      <span className="filter-pill-name">To do</span>
+                      <span className="filter-pill-value">{taskFilterLabel(taskFilter)}</span>
+                      <span className="filter-pill-caret" aria-hidden="true">▾</span>
+                    </button>
+                    {openFilterPanel === "task" ? (
+                      <div className="filter-panel">
+                        <label className="filter-panel-field">
+                          <span>To do</span>
+                          <select
+                            value={taskFilter}
+                            onChange={(event) => setTaskFilter(event.target.value)}
+                          >
+                            <option value="all">All tasks</option>
+                            <option value="withTask">Needs to do</option>
+                            <option value="withoutTask">No to do</option>
+                          </select>
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="filter-pill-group">
+                    <button
+                      className={`filter-pill ${openFilterPanel === "appliedDate" ? "filter-pill-open" : ""}`}
+                      onClick={() => toggleFilterPanel("appliedDate")}
+                      type="button"
+                    >
+                      <span className="filter-pill-name">Applied date</span>
+                      <span className="filter-pill-value">
+                        {appliedDateFilterLabel(appliedDateFrom, appliedDateTo)}
+                      </span>
+                      <span className="filter-pill-caret" aria-hidden="true">▾</span>
+                    </button>
+                    {openFilterPanel === "appliedDate" ? (
+                      <div className="filter-panel filter-panel-wide">
+                        <div className="filter-date-grid">
+                          <label className="filter-panel-field">
+                            <span>Start date</span>
+                            <input
+                              type="date"
+                              value={appliedDateFrom}
+                              onChange={(event) => setAppliedDateFrom(event.target.value)}
+                              aria-label="Applied date start"
+                            />
+                          </label>
+                          <label className="filter-panel-field">
+                            <span>End date</span>
+                            <input
+                              type="date"
+                              value={appliedDateTo}
+                              onChange={(event) => setAppliedDateTo(event.target.value)}
+                              aria-label="Applied date end"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
                   {(tableSearch ||
                     statusFilter !== "all" ||
                     taskFilter !== "all" ||
@@ -2233,6 +2313,46 @@ function toComparableDate(value: string) {
   }
 
   return null;
+}
+
+function statusFilterLabel(value: string) {
+  return value === "all" ? "All statuses" : value;
+}
+
+function taskFilterLabel(value: string) {
+  if (value === "withTask") {
+    return "Needs to do";
+  }
+  if (value === "withoutTask") {
+    return "No to do";
+  }
+  return "All tasks";
+}
+
+function appliedDateFilterLabel(from: string, to: string) {
+  if (from && to) {
+    return `${formatFilterDate(from)} to ${formatFilterDate(to)}`;
+  }
+  if (from) {
+    return `From ${formatFilterDate(from)}`;
+  }
+  if (to) {
+    return `Until ${formatFilterDate(to)}`;
+  }
+  return "Any time";
+}
+
+function formatFilterDate(value: string) {
+  const [year, month, day] = value.split("-").map((part) => Number(part));
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day));
 }
 
 function mergeRecords(current: JobRecord[], imported: JobRecord[]) {

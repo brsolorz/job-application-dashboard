@@ -182,8 +182,9 @@ button {
 .table-filters {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
+  position: relative;
 }
 
 .table-filters select,
@@ -194,34 +195,72 @@ button {
   background: rgba(255, 255, 255, 0.78);
 }
 
-.date-filter-group {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
+.filter-pill-group {
+  position: relative;
 }
 
-.date-filter-label {
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+}
+
+.filter-pill-open {
+  border-color: rgba(29, 36, 51, 0.24);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.filter-pill-name {
+  font-weight: 700;
+}
+
+.filter-pill-value {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.filter-pill-caret {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.filter-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 14px;
+  border: 1px solid rgba(29, 36, 51, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 250, 244, 0.98);
+  box-shadow: 0 18px 40px rgba(30, 38, 56, 0.14);
+}
+
+.filter-panel-wide {
+  min-width: 420px;
+}
+
+.filter-panel-field {
+  display: grid;
+  gap: 6px;
+}
+
+.filter-panel-field span {
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding-bottom: 10px;
 }
 
-.date-filter-field {
+.filter-date-grid {
   display: grid;
-  gap: 4px;
-}
-
-.date-filter-field span {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.date-filter-field input {
-  min-width: 148px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .table-clear-button {
@@ -993,14 +1032,25 @@ td textarea {
     justify-content: flex-start;
   }
 
-  .table-filters > select,
-  .table-filters > button,
-  .table-filters > .date-filter-group {
+  .filter-pill-group,
+  .table-filters > button {
     flex: 1 1 160px;
   }
 
-  .date-filter-group {
-    align-items: stretch;
+  .filter-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .filter-panel,
+  .filter-panel-wide {
+    position: static;
+    min-width: 0;
+    margin-top: 8px;
+  }
+
+  .filter-date-grid {
+    grid-template-columns: 1fr;
   }
 
   .table-search input {
