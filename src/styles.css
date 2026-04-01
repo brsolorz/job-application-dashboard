@@ -847,6 +847,21 @@ td textarea {
   flex-wrap: wrap;
 }
 
+.modal-warning-block {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(151, 61, 29, 0.16);
+  background: rgba(151, 61, 29, 0.08);
+}
+
+.modal-warning-copy {
+  margin-top: 0;
+  color: #7d3416;
+}
+
 .status-modal-row {
   display: grid;
   gap: 8px;

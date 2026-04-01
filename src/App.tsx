@@ -191,6 +191,7 @@ function App() {
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [newCustomColumnName, setNewCustomColumnName] = useState("");
   const [newCustomColumnHelpText, setNewCustomColumnHelpText] = useState("");
+  const [pendingColumnDeletionId, setPendingColumnDeletionId] = useState<string | null>(null);
   const [newStatusDraft, setNewStatusDraft] = useState("");
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
   const [statusReplacementDrafts, setStatusReplacementDrafts] = useState<Record<string, string>>({});
@@ -521,6 +522,7 @@ function App() {
   }
 
   function removeCustomColumn(columnId: string) {
+    setPendingColumnDeletionId(null);
     setCustomColumns((current) => current.filter((column) => column.id !== columnId));
     setHiddenColumns((current) => current.filter((column) => column !== toCustomFieldKey(columnId)));
     setRecords((current) =>
@@ -561,6 +563,16 @@ function App() {
 
   function createCustomColumnFromHeader(header: string) {
     addCustomColumn(header, `Imported from unmatched column "${header}".`, header);
+  }
+
+  function requestRemoveCustomColumn(columnId: string) {
+    const hasData = records.some((record) => Boolean(record.customValues[columnId]?.trim()));
+    if (!hasData) {
+      removeCustomColumn(columnId);
+      return;
+    }
+
+    setPendingColumnDeletionId((current) => (current === columnId ? null : columnId));
   }
 
   function toggleColumnVisibility(fieldKey: FieldKey) {
@@ -1026,7 +1038,7 @@ function App() {
                       <div className="mapping-card-actions">
                         <button
                           className="ghost-button mapping-delete-button"
-                          onClick={() => removeCustomColumn(stripCustomPrefix(field.key))}
+                          onClick={() => requestRemoveCustomColumn(stripCustomPrefix(field.key))}
                         >
                           Delete custom column
                         </button>
@@ -1387,26 +1399,59 @@ function App() {
                 {customColumns.length > 0 ? (
                   customColumns.map((column) => {
                     const fieldKey = toCustomFieldKey(column.id);
+                    const rowsWithData = records.filter((record) =>
+                      Boolean(record.customValues[column.id]?.trim()),
+                    ).length;
+                    const isPendingDeletion = pendingColumnDeletionId === column.id;
                     return (
                       <div key={column.id} className="modal-row">
                         <div>
                           <strong>{column.label}</strong>
                           <span>{column.helpText}</span>
+                          {rowsWithData > 0 ? (
+                            <span>
+                              Used by {rowsWithData} row{rowsWithData === 1 ? "" : "s"}.
+                            </span>
+                          ) : null}
+                          {isPendingDeletion ? (
+                            <div className="modal-warning-block">
+                              <span className="modal-warning-copy">
+                                Deleting this column will remove its saved values from all{" "}
+                                {rowsWithData} row{rowsWithData === 1 ? "" : "s"} that use it.
+                              </span>
+                              <div className="modal-actions">
+                                <button
+                                  className="ghost-button"
+                                  onClick={() => setPendingColumnDeletionId(null)}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className="danger-button"
+                                  onClick={() => removeCustomColumn(column.id)}
+                                >
+                                  Delete column
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="modal-actions">
-                          <button
-                            className="ghost-button"
-                            onClick={() => toggleColumnVisibility(fieldKey)}
-                          >
-                            {hiddenColumns.includes(fieldKey) ? "Show" : "Hide"}
-                          </button>
-                          <button
-                            className="danger-button"
-                            onClick={() => removeCustomColumn(column.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        {isPendingDeletion ? null : (
+                          <div className="modal-actions">
+                            <button
+                              className="ghost-button"
+                              onClick={() => toggleColumnVisibility(fieldKey)}
+                            >
+                              {hiddenColumns.includes(fieldKey) ? "Show" : "Hide"}
+                            </button>
+                            <button
+                              className="danger-button"
+                              onClick={() => requestRemoveCustomColumn(column.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })
